@@ -109,7 +109,6 @@ export function WaypointShell() {
       createdAt: Date.now(),
     }));
     localStorage.setItem(TASKS_KEY, JSON.stringify(sharedTasks));
-    window.dispatchEvent(new CustomEvent("arrow-os:datachange", { detail: { key: TASKS_KEY, value: sharedTasks } }));
   }, [storageReady, todayItems]);
 
   const completed = todayItems.filter((item) => item.completed).length;
