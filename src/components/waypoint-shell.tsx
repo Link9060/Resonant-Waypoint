@@ -24,11 +24,7 @@ const tabs = [
   { id: "review", label: "Review", icon: ReviewIcon }
 ] as const;
 
-const initialToday: TodayItem[] = [
-  { id: "t1", title: "Choose your first real priority", meta: "Waypoint setup · 10 min" },
-  { id: "t2", title: "Add everything currently on your mind", meta: "Brain dump · 5 min" },
-  { id: "t3", title: "Create your first plan", meta: "Plans · when ready" }
-];
+const initialToday: TodayItem[] = [];
 
 const TASKS_KEY = "arrow_os_tasks_v1";
 const EVENTS_KEY = "arrow_os_events_v1";
