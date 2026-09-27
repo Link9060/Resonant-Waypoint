@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { BeaconIcon } from "./beacon-icon";
 import {
   CalendarIcon,
@@ -30,6 +30,26 @@ const initialToday: TodayItem[] = [
   { id: "t3", title: "Create your first plan", meta: "Plans · when ready" }
 ];
 
+const TASKS_KEY = "arrow_os_tasks_v1";
+const EVENTS_KEY = "arrow_os_events_v1";
+const ORBIT_URL = "https://link9060.github.io/Resonant-Orbit/";
+
+type SharedEvent = {
+  id: string;
+  title: string;
+  date: string;
+  time?: string;
+};
+
+function safeJsonList<T>(key: string): T[] {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(key) || "[]");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
 const samplePlans = [
   { title: "Build Waypoint", progress: 12, next: "Define the first working brain-dump flow" },
   { title: "ARROW ecosystem", progress: 38, next: "Connect Waypoint into the ARROW shell" },
@@ -41,6 +61,56 @@ export function WaypointShell() {
   const [dump, setDump] = useState("");
   const [captures, setCaptures] = useState<CapturedItem[]>([]);
   const [todayItems, setTodayItems] = useState(initialToday);
+  const [events, setEvents] = useState<SharedEvent[]>([]);
+  const [storageReady, setStorageReady] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tab = params.get("tab");
+    if (tab && tabs.some((item) => item.id === tab)) {
+      setActiveTab(tab as WaypointTab);
+    }
+
+    const loadShared = () => {
+      const sharedTasks = safeJsonList<{ id?: string; text?: string; done?: boolean; createdAt?: number }>(TASKS_KEY)
+        .filter((task) => typeof task.id === "string" && typeof task.text === "string");
+      if (sharedTasks.length) {
+        setTodayItems(sharedTasks.map((task) => ({
+          id: task.id!,
+          title: task.text!,
+          meta: "ARROW task",
+          completed: Boolean(task.done),
+        })));
+      }
+
+      setEvents(
+        safeJsonList<SharedEvent>(EVENTS_KEY)
+          .filter((event) => typeof event.id === "string" && typeof event.title === "string" && typeof event.date === "string")
+      );
+      setStorageReady(true);
+    };
+
+    loadShared();
+    const refresh = () => loadShared();
+    window.addEventListener("storage", refresh);
+    window.addEventListener("arrow-os:datachange", refresh as EventListener);
+    return () => {
+      window.removeEventListener("storage", refresh);
+      window.removeEventListener("arrow-os:datachange", refresh as EventListener);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!storageReady) return;
+    const sharedTasks = todayItems.map((item) => ({
+      id: item.id,
+      text: item.title,
+      done: Boolean(item.completed),
+      createdAt: Date.now(),
+    }));
+    localStorage.setItem(TASKS_KEY, JSON.stringify(sharedTasks));
+    window.dispatchEvent(new CustomEvent("arrow-os:datachange", { detail: { key: TASKS_KEY, value: sharedTasks } }));
+  }, [storageReady, todayItems]);
 
   const completed = todayItems.filter((item) => item.completed).length;
   const progress = todayItems.length ? Math.round((completed / todayItems.length) * 100) : 0;
@@ -67,6 +137,26 @@ export function WaypointShell() {
 
     if (tasks.length) {
       setTodayItems((current) => [...current, ...tasks]);
+    }
+
+    const capturedEvents: SharedEvent[] = captures
+      .filter((item) => item.accepted && item.type === "event" && item.when)
+      .map((item) => {
+        const parsed = new Date(item.when!);
+        const validDate = !Number.isNaN(parsed.getTime());
+        return {
+          id: `event-${item.id}`,
+          title: item.title,
+          date: validDate ? parsed.toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
+          time: validDate ? parsed.toTimeString().slice(0, 5) : "",
+        };
+      });
+
+    if (capturedEvents.length) {
+      const nextEvents = [...events, ...capturedEvents];
+      setEvents(nextEvents);
+      localStorage.setItem(EVENTS_KEY, JSON.stringify(nextEvents));
+      window.dispatchEvent(new CustomEvent("arrow-os:datachange", { detail: { key: EVENTS_KEY, value: nextEvents } }));
     }
 
     setDump("");
@@ -113,7 +203,15 @@ export function WaypointShell() {
         </nav>
 
         <div className="sidebar-bottom">
-          <button className="orbit-button" type="button">
+          <button
+            className="orbit-button"
+            type="button"
+            onClick={() => {
+              const url = new URL(ORBIT_URL);
+              url.searchParams.set("from", "waypoint");
+              window.location.assign(url.toString());
+            }}
+          >
             <span className="orbit-dot" />
             Back to Orbit
           </button>
@@ -129,7 +227,8 @@ export function WaypointShell() {
           </div>
 
           <div className="topbar-actions">
-            <button className="icon-button" aria-label="Quick add">
+            <div data-arrow-os-shell data-module="waypoint" suppressHydrationWarning />
+            <button className="icon-button" aria-label="Quick add" onClick={() => setActiveTab("dump")}>
               <PlusIcon width={18} height={18} />
             </button>
             <button className="ravin-chip" onClick={() => setActiveTab("dump")}>
@@ -162,7 +261,7 @@ export function WaypointShell() {
           )}
 
           {activeTab === "plans" && <PlansView />}
-          {activeTab === "calendar" && <CalendarView />}
+          {activeTab === "calendar" && <CalendarView events={events} />}
           {activeTab === "direction" && <DirectionView />}
           {activeTab === "review" && <ReviewView />}
         </div>
@@ -426,16 +525,25 @@ function PlansView() {
   );
 }
 
-function CalendarView() {
-  const days = [
-    "MON 21",
-    "TUE 22",
-    "WED 23",
-    "THU 24",
-    "FRI 25",
-    "SAT 26",
-    "SUN 27"
-  ];
+function CalendarView({ events }: { events: SharedEvent[] }) {
+  const today = new Date();
+  today.setHours(12, 0, 0, 0);
+  const start = new Date(today);
+  start.setDate(today.getDate() - today.getDay() + 1);
+
+  const days = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(start);
+    date.setDate(start.getDate() + index);
+    const iso = date.toISOString().slice(0, 10);
+    return {
+      iso,
+      label: date.toLocaleDateString([], { weekday: "short", day: "numeric" }).toUpperCase(),
+      isToday: iso === today.toISOString().slice(0, 10),
+      events: events
+        .filter((event) => event.date === iso)
+        .sort((a, b) => (a.time || "").localeCompare(b.time || "")),
+    };
+  });
 
   return (
     <div className="stack">
@@ -446,22 +554,19 @@ function CalendarView() {
 
       <section className="panel week-panel">
         <div className="week-row">
-          {days.map((day, index) => (
+          {days.map((day) => (
             <div
-              className={`day-column ${index === 4 ? "today-column" : ""}`}
-              key={day}
+              className={`day-column ${day.isToday ? "today-column" : ""}`}
+              key={day.iso}
             >
-              <div className="day-name">{day}</div>
-              <div
-                className={`time-block ${index === 0 || index === 3 ? "visible" : ""}`}
-              >
-                {index === 0 ? "School" : "ARROW"}
-              </div>
-              <div
-                className={`time-block muted ${index === 2 || index === 4 ? "visible" : ""}`}
-              >
-                {index === 2 ? "Practice" : "Review"}
-              </div>
+              <div className="day-name">{day.label}</div>
+              {day.events.length ? day.events.map((event) => (
+                <div className="time-block visible" key={event.id}>
+                  {event.time ? `${event.time} · ` : ""}{event.title}
+                </div>
+              )) : (
+                <div className="time-block muted">Clear</div>
+              )}
             </div>
           ))}
         </div>
