@@ -201,7 +201,18 @@ export function WaypointShell() {
           <button
             className="orbit-button"
             type="button"
-            onClick={() => {
+            onClick={(event) => {
+              const arrowOS = (window as Window & {
+                ArrowOS?: {
+                  launchToOrbit?: (module: string, anchor?: HTMLElement) => void;
+                };
+              }).ArrowOS;
+
+              if (arrowOS?.launchToOrbit) {
+                arrowOS.launchToOrbit("waypoint", event.currentTarget);
+                return;
+              }
+
               const url = new URL(ORBIT_URL);
               url.searchParams.set("from", "waypoint");
               window.location.assign(url.toString());
