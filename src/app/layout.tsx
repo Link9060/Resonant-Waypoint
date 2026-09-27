@@ -11,6 +11,10 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
+      <head>
+        <link rel="stylesheet" href="https://link9060.github.io/Resonant-Orbit/arrow-shell.css?v=20260927-waypoint" />
+        <script defer src="https://link9060.github.io/Resonant-Orbit/arrow-shell.js?v=20260927-waypoint" />
+      </head>
       <body>{children}</body>
     </html>
   );
