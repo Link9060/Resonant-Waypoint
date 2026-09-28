@@ -28,7 +28,7 @@ const initialToday: TodayItem[] = [];
 
 const TASKS_KEY = "arrow_os_tasks_v1";
 const EVENTS_KEY = "arrow_os_events_v1";
-const ORBIT_URL = "https://link9060.github.io/Resonant-Orbit/";
+const ORBIT_URL = "/orbit/";
 
 type SharedEvent = {
   id: string;
@@ -213,7 +213,7 @@ export function WaypointShell() {
                 return;
               }
 
-              const url = new URL(ORBIT_URL);
+              const url = new URL(ORBIT_URL, window.location.origin);
               url.searchParams.set("from", "waypoint");
               window.location.assign(url.toString());
             }}
