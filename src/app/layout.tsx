@@ -12,8 +12,8 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        <link rel="stylesheet" href="/orbit/arrow-shell.css?v=enterarrow-v2" />
-        <script defer src="/orbit/arrow-shell.js?v=enterarrow-v2" />
+        <link rel="stylesheet" href="/orbit/arrow-shell.css?v=enterarrow-v3" />
+        <script defer src="/orbit/arrow-shell.js?v=enterarrow-v3" />
       </head>
       <body>{children}</body>
     </html>
