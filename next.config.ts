@@ -7,8 +7,15 @@ const repositoryOwner = process.env.GITHUB_REPOSITORY_OWNER ?? "";
 const isUserPagesRepository =
   repositoryName.toLowerCase() === `${repositoryOwner.toLowerCase()}.github.io`;
 
-const basePath =
-  isGitHubActions && repositoryName && !isUserPagesRepository
+const configuredBasePath = (process.env.NEXT_PUBLIC_WAYPOINT_BASE_PATH || "").trim();
+const normalizeBasePath = (value: string) => {
+  if (!value || value === "/") return "";
+  return `/${value.replace(/^\/+|\/+$/g, "")}`;
+};
+
+const basePath = configuredBasePath
+  ? normalizeBasePath(configuredBasePath)
+  : isGitHubActions && repositoryName && !isUserPagesRepository
     ? `/${repositoryName}`
     : "";
 
