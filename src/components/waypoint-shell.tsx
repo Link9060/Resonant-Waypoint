@@ -13,12 +13,12 @@ import {
   TodayIcon
 } from "./icons";
 import { interpretBrainDump } from "@/lib/brain-dump";
-import { interpretWithRavin } from "@/lib/ravin";
+import { interpretWithRavin, type WaypointInterpretation } from "@/lib/ravin";
 import type { CapturedItem, TodayItem, WaypointTab } from "@/lib/types";
 
 const tabs = [
   { id: "today", label: "Today", icon: TodayIcon },
-  { id: "dump", label: "Dump", icon: DumpIcon },
+  { id: "dump", label: "Capture", icon: DumpIcon },
   { id: "plans", label: "Plans", icon: PlansIcon },
   { id: "calendar", label: "Calendar", icon: CalendarIcon },
   { id: "direction", label: "Direction", icon: DirectionIcon },
@@ -85,8 +85,7 @@ export function WaypointShell() {
   const [libraryItems, setLibraryItems] = useState<CapturedItem[]>([]);
   const [storageReady, setStorageReady] = useState(false);
   const [isInterpreting, setIsInterpreting] = useState(false);
-  const [interpretationSource, setInterpretationSource] = useState<"ravin" | "local" | null>(null);
-  const [interpretationSummary, setInterpretationSummary] = useState("");
+  const [interpretation, setInterpretation] = useState<WaypointInterpretation | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -143,20 +142,35 @@ export function WaypointShell() {
   async function processDump() {
     if (!dump.trim() || isInterpreting) return;
     setIsInterpreting(true);
-    setInterpretationSummary("");
+    setInterpretation(null);
 
     try {
-      const result = await interpretWithRavin(dump);
+      const result = await interpretWithRavin(dump, {
+        tasks: todayItems,
+        events,
+        library: libraryItems,
+      });
       setCaptures(result.items);
-      setInterpretationSource("ravin");
-      setInterpretationSummary(result.summary);
+      setInterpretation(result);
     } catch (error) {
       const fallback = interpretBrainDump(dump);
+      const fallbackInterpretation: WaypointInterpretation = {
+        summary: `RAVIN is unavailable right now, so Waypoint used its local capture sorter instead. ${error instanceof Error ? error.message : ""}`.trim(),
+        intent: null,
+        next_move: fallback[0]?.title || null,
+        signals: [],
+        route: fallback.slice(0, 4).map((item, index) => ({
+          order: index + 1,
+          title: item.title,
+          reason: "Local fallback ordering",
+          timing: item.when || null,
+        })),
+        questions: [],
+        items: fallback,
+        source: "local",
+      };
       setCaptures(fallback);
-      setInterpretationSource("local");
-      setInterpretationSummary(
-        `RAVIN is unavailable right now, so Waypoint used its local sorter instead. ${error instanceof Error ? error.message : ""}`.trim()
-      );
+      setInterpretation(fallbackInterpretation);
     } finally {
       setIsInterpreting(false);
     }
@@ -182,7 +196,7 @@ export function WaypointShell() {
             ? `Captured · ${timing}`
             : item.when
               ? `Captured · ${item.when}`
-              : "Captured from Dump"
+              : "Captured from Capture"
         };
       });
 
@@ -234,8 +248,7 @@ export function WaypointShell() {
 
     setDump("");
     setCaptures([]);
-    setInterpretationSource(null);
-    setInterpretationSummary("");
+    setInterpretation(null);
     setActiveTab(nextTab);
   }
 
@@ -344,8 +357,7 @@ export function WaypointShell() {
               acceptCaptures={acceptCaptures}
               acceptedCount={acceptedCount}
               isInterpreting={isInterpreting}
-              interpretationSource={interpretationSource}
-              interpretationSummary={interpretationSummary}
+              interpretation={interpretation}
             />
           )}
 
@@ -452,10 +464,10 @@ function TodayView({
           <SparkIcon width={18} height={18} />
         </div>
         <div>
-          <div className="eyebrow">BRAIN DUMP</div>
-          <h3>Too much going on?</h3>
+          <div className="eyebrow">CAPTURE</div>
+          <h3>Too much in your head?</h3>
           <p>
-            Throw the mess here. Waypoint + RAVIN will sort it into tasks, notes, plans, and time.
+            Put it here as-is. RAVIN will read the whole situation, connect it to what Waypoint already knows, and find a route forward.
           </p>
         </div>
         <span className="arrow-glyph">↗</span>
@@ -496,8 +508,7 @@ function DumpView({
   acceptCaptures,
   acceptedCount,
   isInterpreting,
-  interpretationSource,
-  interpretationSummary
+  interpretation
 }: {
   dump: string;
   setDump: (value: string) => void;
@@ -507,8 +518,7 @@ function DumpView({
   acceptCaptures: () => void;
   acceptedCount: number;
   isInterpreting: boolean;
-  interpretationSource: "ravin" | "local" | null;
-  interpretationSummary: string;
+  interpretation: WaypointInterpretation | null;
 }) {
   return (
     <div className="dump-layout">
@@ -516,11 +526,12 @@ function DumpView({
         <div className="dump-prompt">
           <BeaconIcon size={50} active />
           <div>
-            <div className="eyebrow">NO ORGANIZING REQUIRED</div>
-            <h2>What's going on?</h2>
+            <div className="eyebrow">CAPTURE → CLARITY</div>
+            <h2>What’s taking up space in your head?</h2>
             <p>
-              Say everything. Homework, ideas, things you're worried you'll forget, stuff you want
-              to build, dates, goals — messy is fine.
+              Don’t organize it first. Give RAVIN the raw version — things to do, decisions,
+              ideas, plans, dates, goals, problems, stuff you’re unsure about. Waypoint will
+              compare it with what you already have and help decide what it means.
             </p>
           </div>
         </div>
@@ -528,15 +539,15 @@ function DumpView({
         <textarea
           value={dump}
           onChange={(event) => setDump(event.target.value)}
-          placeholder="Okay, so tomorrow I need to..."
+          placeholder="I’ve got calc tomorrow, I want to finish the Waypoint prototype, I need to figure out when I can work on..."
           className="brain-textarea"
         />
 
         <div className="dump-actions">
           <span>
             {dump.length
-              ? `${dump.split(/\s+/).filter(Boolean).length} words`
-              : "Your brain, unfiltered."}
+              ? `${dump.split(/\s+/).filter(Boolean).length} words · context-aware`
+              : "Capture first. Organize later."}
           </span>
           <button
             className="primary-button"
@@ -544,57 +555,165 @@ function DumpView({
             onClick={processDump}
           >
             <SparkIcon width={17} height={17} />
-            {isInterpreting ? "RAVIN is sorting…" : "Make sense of this"}
+            {isInterpreting ? "RAVIN is reasoning…" : "Find my direction"}
           </button>
         </div>
       </section>
 
-      {captures.length > 0 && (
-        <section className="panel capture-panel">
-          <div className="panel-heading">
-            <div>
+      {interpretation && (
+        <>
+          <section className="capture-analysis-grid">
+            <article className="panel reasoning-card reasoning-summary">
               <div className="eyebrow">
-                {interpretationSource === "ravin" ? "RAVIN INTERPRETATION" : "LOCAL FALLBACK"}
+                {interpretation.source === "ravin" ? "RAVIN READ" : "LOCAL FALLBACK"}
               </div>
-              <h3>I found {captures.length} things.</h3>
-              {interpretationSummary ? (
-                <p className="interpretation-summary">{interpretationSummary}</p>
+              <h3>{interpretation.summary}</h3>
+              {interpretation.intent ? (
+                <div className="reasoning-detail">
+                  <span>WHAT YOU’RE REALLY TRYING TO DO</span>
+                  <strong>{interpretation.intent}</strong>
+                </div>
               ) : null}
-            </div>
-            <span className="soft-pill">{acceptedCount} selected</span>
-          </div>
+            </article>
 
-          <div className="capture-list">
-            {captures.map((item) => (
-              <button
-                key={item.id}
-                className={`capture-row ${item.accepted ? "selected" : ""}`}
-                onClick={() => toggleCapture(item.id)}
-              >
-                <span className={`type-dot type-${item.type}`} />
-                <span className="capture-copy">
-                  <strong>{item.title}</strong>
-                  <small>
-                    {item.type}
-                    {item.when ? ` · ${item.when}` : ""}
-                  </small>
-                </span>
-                <span className="capture-check">{item.accepted ? "✓" : ""}</span>
-              </button>
-            ))}
-          </div>
+            <article className="panel reasoning-card reasoning-next">
+              <div className="eyebrow">CLEAREST NEXT MOVE</div>
+              <div className="next-move-mark"><BeaconIcon size={36} active /></div>
+              <h3>{interpretation.next_move || "Review the route below."}</h3>
+              <p>One move first. The rest can stay visible without competing for attention.</p>
+            </article>
+          </section>
 
-          <div className="capture-footer">
-            <span>Nothing changes until you approve it.</span>
-            <button
-              className="primary-button"
-              onClick={acceptCaptures}
-              disabled={!acceptedCount}
-            >
-              Add selected
-            </button>
-          </div>
-        </section>
+          {interpretation.signals.length > 0 && (
+            <section className="panel reasoning-section">
+              <div className="panel-heading">
+                <div>
+                  <div className="eyebrow">WHAT RAVIN NOTICED</div>
+                  <h3>Signals in the situation</h3>
+                </div>
+                <span className="soft-pill">{interpretation.signals.length}</span>
+              </div>
+
+              <div className="signal-grid">
+                {interpretation.signals.map((signal, index) => (
+                  <div className="signal-card" key={`${signal.kind}-${signal.title}-${index}`}>
+                    <span className={`signal-kind signal-${signal.kind}`}>{signal.kind}</span>
+                    <strong>{signal.title}</strong>
+                    <p>{signal.detail}</p>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {interpretation.route.length > 0 && (
+            <section className="panel reasoning-section">
+              <div className="panel-heading">
+                <div>
+                  <div className="eyebrow">RECOMMENDED ROUTE</div>
+                  <h3>How I’d move through this</h3>
+                </div>
+              </div>
+
+              <div className="route-list">
+                {interpretation.route.map((step) => (
+                  <div className="route-row" key={`${step.order}-${step.title}`}>
+                    <span className="route-index">{String(step.order).padStart(2, "0")}</span>
+                    <div className="route-copy">
+                      <strong>{step.title}</strong>
+                      {step.reason ? <p>{step.reason}</p> : null}
+                    </div>
+                    {step.timing ? <span className="route-timing">{step.timing}</span> : null}
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {interpretation.questions.length > 0 && (
+            <section className="panel reasoning-section questions-section">
+              <div className="panel-heading">
+                <div>
+                  <div className="eyebrow">UNRESOLVED</div>
+                  <h3>Answers that could change the route</h3>
+                </div>
+              </div>
+              <div className="question-list">
+                {interpretation.questions.map((question, index) => (
+                  <div className="question-row" key={`${index}-${question}`}>
+                    <span>?</span>
+                    <strong>{question}</strong>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {captures.length > 0 && (
+            <section className="panel capture-panel">
+              <div className="panel-heading">
+                <div>
+                  <div className="eyebrow">PROPOSED CHANGES</div>
+                  <h3>{captures.length} things Waypoint can place.</h3>
+                  <p className="interpretation-summary">
+                    These are the structured pieces underneath the route. Select only what you
+                    actually want added to Waypoint.
+                  </p>
+                </div>
+                <span className="soft-pill">{acceptedCount} selected</span>
+              </div>
+
+              <div className="capture-list">
+                {captures.map((item) => (
+                  <button
+                    key={item.id}
+                    className={`capture-row ${item.accepted ? "selected" : ""}`}
+                    onClick={() => toggleCapture(item.id)}
+                  >
+                    <span className={`type-dot type-${item.type}`} />
+                    <span className="capture-copy">
+                      <strong>{item.title}</strong>
+                      <small>
+                        {item.type}
+                        {item.priority ? ` · ${item.priority}` : ""}
+                        {item.when ? ` · ${item.when}` : ""}
+                        {item.duration_minutes ? ` · ~${item.duration_minutes} min` : ""}
+                      </small>
+                      {item.context ? <em>{item.context}</em> : null}
+                      {item.why ? <span className="capture-why">{item.why}</span> : null}
+                      {item.depends_on?.length ? (
+                        <span className="capture-deps">After: {item.depends_on.join(", ")}</span>
+                      ) : null}
+                    </span>
+                    <span className="capture-check">{item.accepted ? "✓" : ""}</span>
+                  </button>
+                ))}
+              </div>
+
+              <div className="capture-footer">
+                <span>Nothing changes until you approve it.</span>
+                <button
+                  className="primary-button"
+                  onClick={acceptCaptures}
+                  disabled={!acceptedCount}
+                >
+                  Apply selected
+                </button>
+              </div>
+            </section>
+          )}
+
+          {!captures.length && (
+            <section className="panel reasoning-section no-changes-card">
+              <div className="eyebrow">NO CHANGES NEEDED</div>
+              <h3>This Capture was useful without turning it into more tasks.</h3>
+              <p>
+                Keep the reasoning above, or add more context if you want RAVIN to turn it into
+                something actionable.
+              </p>
+            </section>
+          )}
+        </>
       )}
     </div>
   );
@@ -644,7 +763,7 @@ function PlansView({
             <h3>No active plans yet.</h3>
             <div className="next-step">
               <small>START HERE</small>
-              <strong>Dump a project or goal and RAVIN will pull out the route.</strong>
+              <strong>Capture a project or goal and RAVIN will pull out the route.</strong>
             </div>
           </article>
         ) : null}
@@ -829,7 +948,7 @@ function ReviewView({
 function tabEyebrow(tab: WaypointTab) {
   const map: Record<WaypointTab, string> = {
     today: "WAYPOINT / TODAY",
-    dump: "WAYPOINT / DUMP",
+    dump: "WAYPOINT / CAPTURE",
     plans: "WAYPOINT / PLANS",
     calendar: "WAYPOINT / CALENDAR",
     direction: "WAYPOINT / DIRECTION",
@@ -842,7 +961,7 @@ function tabEyebrow(tab: WaypointTab) {
 function tabTitle(tab: WaypointTab) {
   const map: Record<WaypointTab, string> = {
     today: "Today",
-    dump: "Brain dump",
+    dump: "Capture",
     plans: "Plans",
     calendar: "Calendar",
     direction: "Direction",
