@@ -13,12 +13,21 @@ import {
   TodayIcon
 } from "./icons";
 import { interpretBrainDump } from "@/lib/brain-dump";
-import { interpretWithRavin, type WaypointInterpretation } from "@/lib/ravin";
+import {
+  createCalendarEvent,
+  createSharedNote,
+  createTodo,
+  loadPlanningData,
+  migrateLegacyPlanningData,
+  openRavinFromWaypoint,
+  resolveDueDate,
+  setTodoCompleted
+} from "@/lib/arrow-data";
 import type { CapturedItem, TodayItem, WaypointTab } from "@/lib/types";
 
 const tabs = [
   { id: "today", label: "Today", icon: TodayIcon },
-  { id: "dump", label: "Capture", icon: DumpIcon },
+  { id: "dump", label: "Dump", icon: DumpIcon },
   { id: "plans", label: "Plans", icon: PlansIcon },
   { id: "calendar", label: "Calendar", icon: CalendarIcon },
   { id: "direction", label: "Direction", icon: DirectionIcon },
@@ -27,11 +36,7 @@ const tabs = [
 
 const initialToday: TodayItem[] = [];
 
-const TASKS_KEY = "arrow_os_tasks_v1";
-const EVENTS_KEY = "arrow_os_events_v1";
-const NOTES_KEY = "arrow_os_notes_v1";
-const LIBRARY_KEY = "waypoint_library_v1";
-const ORBIT_URL = "/orbit/";
+const ORBIT_URL = "https://link9060.github.io/Resonant-Orbit/";
 
 type SharedEvent = {
   id: string;
@@ -40,41 +45,18 @@ type SharedEvent = {
   time?: string;
 };
 
-function safeJsonList<T>(key: string): T[] {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(key) || "[]");
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
+function dueMeta(dueOn: string) {
+  const today = new Date();
+  const localToday = new Date(today.getTime() - today.getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
+  if (dueOn === localToday) return "Due today";
+  return `Due ${new Date(`${dueOn}T12:00:00`).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })}`;
 }
 
-function localIsoDate(offsetDays = 0) {
-  const date = new Date();
-  date.setHours(12, 0, 0, 0);
-  date.setDate(date.getDate() + offsetDays);
-  const pad = (value: number) => String(value).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
-}
-
-function resolveCaptureDate(item: CapturedItem) {
-  if (item.date && /^\d{4}-\d{2}-\d{2}$/.test(item.date)) return item.date;
-  const when = String(item.when || "").trim().toLowerCase();
-  if (!when) return null;
-  if (when === "today" || when === "tonight") return localIsoDate(0);
-  if (when === "tomorrow") return localIsoDate(1);
-
-  const weekdays = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
-  const target = weekdays.indexOf(when.replace(/^next\s+/, ""));
-  if (target >= 0) {
-    const date = new Date();
-    const delta = (target - date.getDay() + 7) % 7 || 7;
-    return localIsoDate(when.startsWith("next ") ? delta + 7 : delta);
-  }
-
-  const parsed = new Date(item.when || "");
-  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString().slice(0, 10);
-}
+const samplePlans = [
+  { title: "Build Waypoint", progress: 12, next: "Define the first working brain-dump flow" },
+  { title: "ARROW ecosystem", progress: 38, next: "Connect Waypoint into the ARROW shell" },
+  { title: "Personal direction", progress: 5, next: "Add the first long-range horizon" }
+];
 
 export function WaypointShell() {
   const [activeTab, setActiveTab] = useState<WaypointTab>("today");
@@ -82,10 +64,33 @@ export function WaypointShell() {
   const [captures, setCaptures] = useState<CapturedItem[]>([]);
   const [todayItems, setTodayItems] = useState(initialToday);
   const [events, setEvents] = useState<SharedEvent[]>([]);
-  const [libraryItems, setLibraryItems] = useState<CapturedItem[]>([]);
-  const [storageReady, setStorageReady] = useState(false);
-  const [isInterpreting, setIsInterpreting] = useState(false);
-  const [interpretation, setInterpretation] = useState<WaypointInterpretation | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(true);
+
+  async function refreshPlanning({ migrate = false } = {}) {
+    setSyncing(true);
+    try {
+      if (migrate) await migrateLegacyPlanningData();
+      const shared = await loadPlanningData();
+      setTodayItems(shared.todos.map((task) => ({
+        id: task.id,
+        title: task.title,
+        meta: dueMeta(task.due_on),
+        completed: task.completed
+      })));
+      setEvents(shared.events.map((event) => ({
+        id: event.id,
+        title: event.title,
+        date: event.event_date,
+        time: event.start_time?.slice(0, 5) || ""
+      })));
+      setSyncError(null);
+    } catch (error) {
+      setSyncError(error instanceof Error ? error.message : "Waypoint could not sync ARROW data.");
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -94,86 +99,27 @@ export function WaypointShell() {
       setActiveTab(tab as WaypointTab);
     }
 
-    const loadShared = () => {
-      const sharedTasks = safeJsonList<{ id?: string; text?: string; done?: boolean; createdAt?: number }>(TASKS_KEY)
-        .filter((task) => typeof task.id === "string" && typeof task.text === "string");
-      setTodayItems(sharedTasks.map((task) => ({
-        id: task.id!,
-        title: task.text!,
-        meta: "ARROW task",
-        completed: Boolean(task.done),
-      })));
-
-      setEvents(
-        safeJsonList<SharedEvent>(EVENTS_KEY)
-          .filter((event) => typeof event.id === "string" && typeof event.title === "string" && typeof event.date === "string")
-      );
-      setLibraryItems(
-        safeJsonList<CapturedItem>(LIBRARY_KEY)
-          .filter((item) => typeof item.id === "string" && typeof item.title === "string")
-      );
-      setStorageReady(true);
+    void refreshPlanning({ migrate: true });
+    const refresh = () => void refreshPlanning();
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === "arrow_shared_data_ping_v1") refresh();
     };
-
-    loadShared();
-    const refresh = () => loadShared();
-    window.addEventListener("storage", refresh);
-    window.addEventListener("arrow-os:datachange", refresh as EventListener);
+    window.addEventListener("arrow:planning-changed", refresh);
+    window.addEventListener("storage", onStorage);
+    window.addEventListener("focus", refresh);
     return () => {
-      window.removeEventListener("storage", refresh);
-      window.removeEventListener("arrow-os:datachange", refresh as EventListener);
+      window.removeEventListener("arrow:planning-changed", refresh);
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener("focus", refresh);
     };
   }, []);
-
-  useEffect(() => {
-    if (!storageReady) return;
-    const sharedTasks = todayItems.map((item) => ({
-      id: item.id,
-      text: item.title,
-      done: Boolean(item.completed),
-      createdAt: Date.now(),
-    }));
-    localStorage.setItem(TASKS_KEY, JSON.stringify(sharedTasks));
-  }, [storageReady, todayItems]);
 
   const completed = todayItems.filter((item) => item.completed).length;
   const progress = todayItems.length ? Math.round((completed / todayItems.length) * 100) : 0;
 
-  async function processDump() {
-    if (!dump.trim() || isInterpreting) return;
-    setIsInterpreting(true);
-    setInterpretation(null);
-
-    try {
-      const result = await interpretWithRavin(dump, {
-        tasks: todayItems,
-        events,
-        library: libraryItems,
-      });
-      setCaptures(result.items);
-      setInterpretation(result);
-    } catch (error) {
-      const fallback = interpretBrainDump(dump);
-      const fallbackInterpretation: WaypointInterpretation = {
-        summary: `RAVIN is unavailable right now, so Waypoint used its local capture sorter instead. ${error instanceof Error ? error.message : ""}`.trim(),
-        intent: null,
-        next_move: fallback[0]?.title || null,
-        signals: [],
-        route: fallback.slice(0, 4).map((item, index) => ({
-          order: index + 1,
-          title: item.title,
-          reason: "Local fallback ordering",
-          timing: item.when || null,
-        })),
-        questions: [],
-        items: fallback,
-        source: "local",
-      };
-      setCaptures(fallback);
-      setInterpretation(fallbackInterpretation);
-    } finally {
-      setIsInterpreting(false);
-    }
+  function processDump() {
+    const result = interpretBrainDump(dump);
+    setCaptures(result);
   }
 
   function toggleCapture(id: string) {
@@ -182,79 +128,54 @@ export function WaypointShell() {
     );
   }
 
-  function acceptCaptures() {
-    const accepted = captures.filter((item) => item.accepted);
+  async function acceptCaptures() {
+    const selected = captures.filter((item) => item.accepted);
+    if (!selected.length) return;
 
-    const todayTasks = accepted
-      .filter((item) => item.type === "task" && (!item.placement || item.placement === "today"))
-      .map((item) => {
-        const timing = [item.date, item.time].filter(Boolean).join(" ");
-        return {
-          id: `today-${item.id}`,
-          title: item.title,
-          meta: timing
-            ? `Captured · ${timing}`
-            : item.when
-              ? `Captured · ${item.when}`
-              : "Captured"
-        };
-      });
+    setSyncing(true);
+    try {
+      await Promise.all(selected.map(async (item) => {
+        if (item.type === "task") {
+          await createTodo(item.title, resolveDueDate(item.when));
+          return;
+        }
+        if (item.type === "event") {
+          await createCalendarEvent(item.title, resolveDueDate(item.when));
+          return;
+        }
 
-    if (todayTasks.length) {
-      setTodayItems((current) => [...current, ...todayTasks]);
+        const label = item.type.toUpperCase();
+        const context = [`Captured in Waypoint as ${label}.`, item.when ? `Timing: ${item.when}.` : "", item.context || ""]
+          .filter(Boolean)
+          .join(" ");
+        await createSharedNote(item.title, context || item.title);
+      }));
+
+      setDump("");
+      setCaptures([]);
+      setActiveTab("today");
+      await refreshPlanning();
+      window.dispatchEvent(new CustomEvent("arrow:planning-changed"));
+    } catch (error) {
+      setSyncError(error instanceof Error ? error.message : "Waypoint could not save your captures.");
+    } finally {
+      setSyncing(false);
     }
+  }
 
-    const capturedEvents: SharedEvent[] = accepted.flatMap((item) => {
-      if (item.type !== "event") return [];
-      const date = resolveCaptureDate(item);
-      if (!date) return [];
-      return [{
-        id: `event-${item.id}`,
-        title: item.title,
-        date,
-        time: item.time || "",
-      }];
-    });
-
-    if (capturedEvents.length) {
-      const nextEvents = [...events, ...capturedEvents];
-      setEvents(nextEvents);
-      localStorage.setItem(EVENTS_KEY, JSON.stringify(nextEvents));
-      window.dispatchEvent(new CustomEvent("arrow-os:datachange", { detail: { key: EVENTS_KEY, value: nextEvents } }));
+  async function toggleTodayItem(id: string, completed: boolean) {
+    setTodayItems((current) =>
+      current.map((item) => item.id === id ? { ...item, completed } : item)
+    );
+    try {
+      await setTodoCompleted(id, completed);
+      window.dispatchEvent(new CustomEvent("arrow:planning-changed"));
+    } catch (error) {
+      setTodayItems((current) =>
+        current.map((item) => item.id === id ? { ...item, completed: !completed } : item)
+      );
+      setSyncError(error instanceof Error ? error.message : "Waypoint could not update that task.");
     }
-
-    const libraryAdds = accepted.filter((item) => {
-      if (item.type === "event") return false;
-      if (item.type === "task" && (!item.placement || item.placement === "today")) return false;
-      return true;
-    });
-
-    if (libraryAdds.length) {
-      const nextLibrary = [...libraryItems, ...libraryAdds];
-      setLibraryItems(nextLibrary);
-      localStorage.setItem(LIBRARY_KEY, JSON.stringify(nextLibrary));
-    }
-
-    const notes = accepted.filter((item) => item.type === "note");
-    if (notes.length) {
-      const currentNotes = localStorage.getItem(NOTES_KEY) || "";
-      const addition = notes.map((item) => `• ${item.title}`).join("\n");
-      const nextNotes = [currentNotes.trim(), addition].filter(Boolean).join("\n\n");
-      localStorage.setItem(NOTES_KEY, nextNotes);
-      window.dispatchEvent(new CustomEvent("arrow-os:datachange", { detail: { key: NOTES_KEY, value: nextNotes } }));
-    }
-
-    const nextTab: WaypointTab =
-      todayTasks.length ? "today"
-        : capturedEvents.length ? "calendar"
-          : accepted.some((item) => item.placement === "plans" || item.type === "project" || item.type === "later") ? "plans"
-            : accepted.some((item) => item.placement === "direction" || item.type === "goal") ? "direction"
-              : "today";
-
-    setDump("");
-    setCaptures([]);
-    setInterpretation(null);
-    setActiveTab(nextTab);
   }
 
   const acceptedCount = useMemo(
@@ -311,7 +232,7 @@ export function WaypointShell() {
                 return;
               }
 
-              const url = new URL(ORBIT_URL, window.location.origin);
+              const url = new URL(ORBIT_URL);
               url.searchParams.set("from", "waypoint");
               window.location.assign(url.toString());
             }}
@@ -335,7 +256,7 @@ export function WaypointShell() {
             <button className="icon-button" aria-label="Quick add" onClick={() => setActiveTab("dump")}>
               <PlusIcon width={18} height={18} />
             </button>
-            <button className="ravin-chip" onClick={() => setActiveTab("dump")}>
+            <button className="ravin-chip" onClick={() => openRavinFromWaypoint()}>
               <SparkIcon width={16} height={16} />
               Ask RAVIN
             </button>
@@ -343,10 +264,15 @@ export function WaypointShell() {
         </header>
 
         <div className="content">
+          {(syncError || syncing) && (
+            <div className={`waypoint-sync-state ${syncError ? "error" : ""}`}>
+              {syncError || "Syncing with ARROW…"}
+            </div>
+          )}
           {activeTab === "today" && (
             <TodayView
               items={todayItems}
-              setItems={setTodayItems}
+              onToggle={toggleTodayItem}
               progress={progress}
               onDump={() => setActiveTab("dump")}
             />
@@ -361,25 +287,13 @@ export function WaypointShell() {
               toggleCapture={toggleCapture}
               acceptCaptures={acceptCaptures}
               acceptedCount={acceptedCount}
-              isInterpreting={isInterpreting}
-              interpretation={interpretation}
             />
           )}
 
-          {activeTab === "plans" && (
-            <PlansView
-              items={libraryItems}
-              onNewPlan={() => {
-                setDump("I want to plan: ");
-                setActiveTab("dump");
-              }}
-            />
-          )}
+          {activeTab === "plans" && <PlansView />}
           {activeTab === "calendar" && <CalendarView events={events} />}
-          {activeTab === "direction" && <DirectionView items={libraryItems} />}
-          {activeTab === "review" && (
-            <ReviewView items={todayItems} libraryItems={libraryItems} events={events} />
-          )}
+          {activeTab === "direction" && <DirectionView />}
+          {activeTab === "review" && <ReviewView />}
         </div>
       </section>
     </main>
@@ -388,12 +302,12 @@ export function WaypointShell() {
 
 function TodayView({
   items,
-  setItems,
+  onToggle,
   progress,
   onDump
 }: {
   items: TodayItem[];
-  setItems: React.Dispatch<React.SetStateAction<TodayItem[]>>;
+  onToggle: (id: string, completed: boolean) => void;
   progress: number;
   onDump: () => void;
 }) {
@@ -441,15 +355,7 @@ function TodayView({
             <button
               className={`task-row ${item.completed ? "done" : ""}`}
               key={item.id}
-              onClick={() =>
-                setItems((current) =>
-                  current.map((currentItem) =>
-                    currentItem.id === item.id
-                      ? { ...currentItem, completed: !currentItem.completed }
-                      : currentItem
-                  )
-                )
-              }
+              onClick={() => void onToggle(item.id, !item.completed)}
             >
               <span className="task-index">
                 {String(index + 1).padStart(2, "0")}
@@ -469,10 +375,10 @@ function TodayView({
           <SparkIcon width={18} height={18} />
         </div>
         <div>
-          <div className="eyebrow">CAPTURE</div>
-          <h3>Too much in your head?</h3>
+          <div className="eyebrow">BRAIN DUMP</div>
+          <h3>Too much going on?</h3>
           <p>
-            Put it here as-is. RAVIN will read the whole situation, connect it to what Waypoint already knows, and find a route forward.
+            Throw the mess here. Waypoint + RAVIN will sort it into tasks, notes, plans, and time.
           </p>
         </div>
         <span className="arrow-glyph">↗</span>
@@ -511,19 +417,15 @@ function DumpView({
   processDump,
   toggleCapture,
   acceptCaptures,
-  acceptedCount,
-  isInterpreting,
-  interpretation
+  acceptedCount
 }: {
   dump: string;
   setDump: (value: string) => void;
   captures: CapturedItem[];
-  processDump: () => void | Promise<void>;
+  processDump: () => void;
   toggleCapture: (id: string) => void;
   acceptCaptures: () => void;
   acceptedCount: number;
-  isInterpreting: boolean;
-  interpretation: WaypointInterpretation | null;
 }) {
   return (
     <div className="dump-layout">
@@ -531,12 +433,11 @@ function DumpView({
         <div className="dump-prompt">
           <BeaconIcon size={50} active />
           <div>
-            <div className="eyebrow">CAPTURE → CLARITY</div>
-            <h2>What’s taking up space in your head?</h2>
+            <div className="eyebrow">NO ORGANIZING REQUIRED</div>
+            <h2>What's going on?</h2>
             <p>
-              Don’t organize it first. Give RAVIN the raw version — things to do, decisions,
-              ideas, plans, dates, goals, problems, stuff you’re unsure about. Waypoint will
-              compare it with what you already have and help decide what it means.
+              Say everything. Homework, ideas, things you're worried you'll forget, stuff you want
+              to build, dates, goals — messy is fine.
             </p>
           </div>
         </div>
@@ -544,198 +445,74 @@ function DumpView({
         <textarea
           value={dump}
           onChange={(event) => setDump(event.target.value)}
-          placeholder="I’ve got calc tomorrow, I want to finish the Waypoint prototype, I need to figure out when I can work on..."
+          placeholder="Okay, so tomorrow I need to..."
           className="brain-textarea"
         />
 
         <div className="dump-actions">
           <span>
             {dump.length
-              ? `${dump.split(/\s+/).filter(Boolean).length} words · context-aware`
-              : "Capture first. Organize later."}
+              ? `${dump.split(/\s+/).filter(Boolean).length} words`
+              : "Your brain, unfiltered."}
           </span>
           <button
             className="primary-button"
-            disabled={!dump.trim() || isInterpreting}
+            disabled={!dump.trim()}
             onClick={processDump}
           >
             <SparkIcon width={17} height={17} />
-            {isInterpreting ? "RAVIN is reasoning…" : "Find my direction"}
+            Make sense of this
           </button>
         </div>
       </section>
 
-      {interpretation && (
-        <>
-          <section className="capture-analysis-grid">
-            <article className="panel reasoning-card reasoning-summary">
-              <div className="eyebrow">
-                {interpretation.source === "ravin" ? "RAVIN READ" : "LOCAL FALLBACK"}
-              </div>
-              <h3>{interpretation.summary}</h3>
-              {interpretation.intent ? (
-                <div className="reasoning-detail">
-                  <span>WHAT YOU’RE REALLY TRYING TO DO</span>
-                  <strong>{interpretation.intent}</strong>
-                </div>
-              ) : null}
-            </article>
+      {captures.length > 0 && (
+        <section className="panel capture-panel">
+          <div className="panel-heading">
+            <div>
+              <div className="eyebrow">RAVIN INTERPRETATION</div>
+              <h3>I found {captures.length} things.</h3>
+            </div>
+            <span className="soft-pill">{acceptedCount} selected</span>
+          </div>
 
-            <article className="panel reasoning-card reasoning-next">
-              <div className="eyebrow">CLEAREST NEXT MOVE</div>
-              <div className="next-move-mark"><BeaconIcon size={36} active /></div>
-              <h3>{interpretation.next_move || "Review the route below."}</h3>
-              <p>One move first. The rest can stay visible without competing for attention.</p>
-            </article>
-          </section>
+          <div className="capture-list">
+            {captures.map((item) => (
+              <button
+                key={item.id}
+                className={`capture-row ${item.accepted ? "selected" : ""}`}
+                onClick={() => toggleCapture(item.id)}
+              >
+                <span className={`type-dot type-${item.type}`} />
+                <span className="capture-copy">
+                  <strong>{item.title}</strong>
+                  <small>
+                    {item.type}
+                    {item.when ? ` · ${item.when}` : ""}
+                  </small>
+                </span>
+                <span className="capture-check">{item.accepted ? "✓" : ""}</span>
+              </button>
+            ))}
+          </div>
 
-          {interpretation.signals.length > 0 && (
-            <section className="panel reasoning-section">
-              <div className="panel-heading">
-                <div>
-                  <div className="eyebrow">WHAT RAVIN NOTICED</div>
-                  <h3>Signals in the situation</h3>
-                </div>
-                <span className="soft-pill">{interpretation.signals.length}</span>
-              </div>
-
-              <div className="signal-grid">
-                {interpretation.signals.map((signal, index) => (
-                  <div className="signal-card" key={`${signal.kind}-${signal.title}-${index}`}>
-                    <span className={`signal-kind signal-${signal.kind}`}>{signal.kind}</span>
-                    <strong>{signal.title}</strong>
-                    <p>{signal.detail}</p>
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {interpretation.route.length > 0 && (
-            <section className="panel reasoning-section">
-              <div className="panel-heading">
-                <div>
-                  <div className="eyebrow">RECOMMENDED ROUTE</div>
-                  <h3>How I’d move through this</h3>
-                </div>
-              </div>
-
-              <div className="route-list">
-                {interpretation.route.map((step) => (
-                  <div className="route-row" key={`${step.order}-${step.title}`}>
-                    <span className="route-index">{String(step.order).padStart(2, "0")}</span>
-                    <div className="route-copy">
-                      <strong>{step.title}</strong>
-                      {step.reason ? <p>{step.reason}</p> : null}
-                    </div>
-                    {step.timing ? <span className="route-timing">{step.timing}</span> : null}
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {interpretation.questions.length > 0 && (
-            <section className="panel reasoning-section questions-section">
-              <div className="panel-heading">
-                <div>
-                  <div className="eyebrow">UNRESOLVED</div>
-                  <h3>Answers that could change the route</h3>
-                </div>
-              </div>
-              <div className="question-list">
-                {interpretation.questions.map((question, index) => (
-                  <div className="question-row" key={`${index}-${question}`}>
-                    <span>?</span>
-                    <strong>{question}</strong>
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {captures.length > 0 && (
-            <section className="panel capture-panel">
-              <div className="panel-heading">
-                <div>
-                  <div className="eyebrow">PROPOSED CHANGES</div>
-                  <h3>{captures.length} things Waypoint can place.</h3>
-                  <p className="interpretation-summary">
-                    These are the structured pieces underneath the route. Select only what you
-                    actually want added to Waypoint.
-                  </p>
-                </div>
-                <span className="soft-pill">{acceptedCount} selected</span>
-              </div>
-
-              <div className="capture-list">
-                {captures.map((item) => (
-                  <button
-                    key={item.id}
-                    className={`capture-row ${item.accepted ? "selected" : ""}`}
-                    onClick={() => toggleCapture(item.id)}
-                  >
-                    <span className={`type-dot type-${item.type}`} />
-                    <span className="capture-copy">
-                      <strong>{item.title}</strong>
-                      <small>
-                        {item.type}
-                        {item.priority ? ` · ${item.priority}` : ""}
-                        {item.placement ? ` · → ${item.placement}` : ""}
-                        {item.when ? ` · ${item.when}` : ""}
-                        {item.duration_minutes ? ` · ~${item.duration_minutes} min` : ""}
-                      </small>
-                      {item.context ? <em>{item.context}</em> : null}
-                      {item.why ? <span className="capture-why">{item.why}</span> : null}
-                      {item.depends_on?.length ? (
-                        <span className="capture-deps">After: {item.depends_on.join(", ")}</span>
-                      ) : null}
-                    </span>
-                    <span className="capture-check">{item.accepted ? "✓" : ""}</span>
-                  </button>
-                ))}
-              </div>
-
-              <div className="capture-footer">
-                <span>Nothing changes until you approve it.</span>
-                <button
-                  className="primary-button"
-                  onClick={acceptCaptures}
-                  disabled={!acceptedCount}
-                >
-                  Apply selected
-                </button>
-              </div>
-            </section>
-          )}
-
-          {!captures.length && (
-            <section className="panel reasoning-section no-changes-card">
-              <div className="eyebrow">NO CHANGES NEEDED</div>
-              <h3>This Capture was useful without turning it into more tasks.</h3>
-              <p>
-                Keep the reasoning above, or add more context if you want RAVIN to turn it into
-                something actionable.
-              </p>
-            </section>
-          )}
-        </>
+          <div className="capture-footer">
+            <span>Nothing changes until you approve it.</span>
+            <button
+              className="primary-button"
+              onClick={acceptCaptures}
+              disabled={!acceptedCount}
+            >
+              Add selected
+            </button>
+          </div>
+        </section>
       )}
     </div>
   );
 }
 
-function PlansView({
-  items,
-  onNewPlan
-}: {
-  items: CapturedItem[];
-  onNewPlan: () => void;
-}) {
-  const projects = items.filter((item) => item.type === "project");
-  const upcoming = items.filter((item) => item.type === "task" && item.placement !== "today");
-  const loose = items.filter((item) => item.type === "note" || item.type === "later");
-
+function PlansView() {
   return (
     <div className="stack">
       <section className="section-intro">
@@ -744,95 +521,28 @@ function PlansView({
       </section>
 
       <div className="plan-grid">
-        {projects.map((plan) => (
-          <article className="panel plan-card" key={plan.id}>
+        {samplePlans.map((plan) => (
+          <article className="panel plan-card" key={plan.title}>
             <div className="plan-top">
               <BeaconIcon size={28} />
-              <span>0%</span>
+              <span>{plan.progress}%</span>
             </div>
             <h3>{plan.title}</h3>
             <div className="mini-progress">
-              <span style={{ width: "0%" }} />
+              <span style={{ width: `${plan.progress}%` }} />
             </div>
             <div className="next-step">
               <small>NEXT MOVE</small>
-              <strong>{plan.context || "Choose the first concrete action."}</strong>
+              <strong>{plan.next}</strong>
             </div>
           </article>
         ))}
 
-        {!projects.length ? (
-          <article className="panel plan-card">
-            <div className="plan-top">
-              <BeaconIcon size={28} />
-              <span>READY</span>
-            </div>
-            <h3>No active plans yet.</h3>
-            <div className="next-step">
-              <small>START HERE</small>
-              <strong>Capture a project or goal and RAVIN will pull out the route.</strong>
-            </div>
-          </article>
-        ) : null}
-
-        <button className="panel new-plan-card" onClick={onNewPlan}>
+        <button className="panel new-plan-card">
           <PlusIcon width={22} height={22} />
           <span>New plan</span>
         </button>
       </div>
-
-      {upcoming.length ? (
-        <section className="panel capture-panel">
-          <div className="panel-heading">
-            <div>
-              <div className="eyebrow">UPCOMING MOVES</div>
-              <h3>Useful, just not for Today.</h3>
-            </div>
-            <span className="soft-pill">{upcoming.length}</span>
-          </div>
-          <div className="capture-list">
-            {upcoming.map((item) => (
-              <div className="capture-row selected" key={item.id}>
-                <span className={`type-dot type-${item.type}`} />
-                <span className="capture-copy">
-                  <strong>{item.title}</strong>
-                  <small>
-                    {item.priority || "medium"}
-                    {item.when ? ` · ${item.when}` : ""}
-                    {item.duration_minutes ? ` · ~${item.duration_minutes} min` : ""}
-                  </small>
-                  {item.context ? <em>{item.context}</em> : null}
-                </span>
-                <span className="capture-check">→</span>
-              </div>
-            ))}
-          </div>
-        </section>
-      ) : null}
-
-      {loose.length ? (
-        <section className="panel capture-panel">
-          <div className="panel-heading">
-            <div>
-              <div className="eyebrow">PARKED</div>
-              <h3>Notes + later</h3>
-            </div>
-            <span className="soft-pill">{loose.length}</span>
-          </div>
-          <div className="capture-list">
-            {loose.map((item) => (
-              <div className="capture-row selected" key={item.id}>
-                <span className={`type-dot type-${item.type}`} />
-                <span className="capture-copy">
-                  <strong>{item.title}</strong>
-                  <small>{item.type}{item.when ? ` · ${item.when}` : ""}</small>
-                </span>
-                <span className="capture-check">•</span>
-              </div>
-            ))}
-          </div>
-        </section>
-      ) : null}
     </div>
   );
 }
@@ -887,9 +597,7 @@ function CalendarView({ events }: { events: SharedEvent[] }) {
   );
 }
 
-function DirectionView({ items }: { items: CapturedItem[] }) {
-  const goals = items.filter((item) => item.type === "goal");
-
+function DirectionView() {
   return (
     <div className="direction-layout">
       <section className="panel direction-hero">
@@ -907,74 +615,61 @@ function DirectionView({ items }: { items: CapturedItem[] }) {
         <div className="panel-heading">
           <div>
             <div className="eyebrow">HORIZONS</div>
-            <h3>Directions worth moving toward</h3>
+            <h3>Near → Far</h3>
           </div>
         </div>
 
-        {goals.length ? goals.map((goal, index) => (
-          <div className="horizon-row" key={goal.id}>
-            <span>{goal.when ? goal.when.toUpperCase() : `GOAL ${index + 1}`}</span>
-            <strong>{goal.title}</strong>
+        {[
+          ["NOW", "Get the important stuff under control"],
+          ["NEAR", "Build things that actually work"],
+          ["NEXT", "Become genuinely capable at engineering"],
+          ["FAR", "Create work and products that matter"]
+        ].map(([range, copy]) => (
+          <div className="horizon-row" key={range}>
+            <span>{range}</span>
+            <strong>{copy}</strong>
           </div>
-        )) : (
-          <div className="horizon-row">
-            <span>EMPTY</span>
-            <strong>Capture a goal and RAVIN will place it here.</strong>
-          </div>
-        )}
+        ))}
       </section>
     </div>
   );
 }
 
-function ReviewView({
-  items,
-  libraryItems,
-  events
-}: {
-  items: TodayItem[];
-  libraryItems: CapturedItem[];
-  events: SharedEvent[];
-}) {
-  const completed = items.filter((item) => item.completed).length;
-  const projects = libraryItems.filter((item) => item.type === "project");
-  const goals = libraryItems.filter((item) => item.type === "goal");
-  const postponed = libraryItems.filter((item) => item.type === "later");
-
+function ReviewView() {
   return (
     <div className="review-grid">
       <section className="panel metric-card">
-        <span className="metric">{completed}</span>
+        <span className="metric">12</span>
         <small>moves completed</small>
       </section>
       <section className="panel metric-card">
-        <span className="metric">{projects.length}</span>
-        <small>active plans captured</small>
+        <span className="metric">3</span>
+        <small>plans advanced</small>
       </section>
       <section className="panel metric-card">
-        <span className="metric">{postponed.length}</span>
-        <small>things intentionally parked</small>
+        <span className="metric">2</span>
+        <small>things repeatedly postponed</small>
       </section>
 
       <section className="panel review-story">
-        <div className="eyebrow">REAL DATA</div>
-        <h2>What is actually in motion?</h2>
+        <div className="eyebrow">THIS WEEK</div>
+        <h2>What actually happened?</h2>
         <p>
-          This prototype review uses your real Waypoint data instead of placeholder scores.
-          As Waypoint grows, RAVIN can turn this into a weekly reflection and pattern report.
+          Waypoint should reflect reality, not grade you. Reviews surface where your time went,
+          what moved, what stalled, and what you may want to change.
         </p>
 
         <div className="review-line">
-          <span>Open moves</span>
-          <strong>{items.filter((item) => !item.completed).length}</strong>
+          <span>Most attention</span>
+          <strong>ARROW</strong>
         </div>
         <div className="review-line">
-          <span>Direction</span>
-          <strong>{goals.length ? `${goals.length} saved goal${goals.length === 1 ? "" : "s"}` : "No saved goals yet"}</strong>
+          <span>Lost momentum</span>
+          <strong>Personal projects</strong>
         </div>
         <div className="review-line">
-          <span>Calendar</span>
-          <strong>{events.length ? `${events.length} saved event${events.length === 1 ? "" : "s"}` : "No saved events yet"}</strong>
+          <span>Worth reconsidering</span>
+          <strong>2 postponed items</strong>
         </div>
       </section>
     </div>
@@ -984,7 +679,7 @@ function ReviewView({
 function tabEyebrow(tab: WaypointTab) {
   const map: Record<WaypointTab, string> = {
     today: "WAYPOINT / TODAY",
-    dump: "WAYPOINT / CAPTURE",
+    dump: "WAYPOINT / DUMP",
     plans: "WAYPOINT / PLANS",
     calendar: "WAYPOINT / CALENDAR",
     direction: "WAYPOINT / DIRECTION",
@@ -997,7 +692,7 @@ function tabEyebrow(tab: WaypointTab) {
 function tabTitle(tab: WaypointTab) {
   const map: Record<WaypointTab, string> = {
     today: "Today",
-    dump: "Capture",
+    dump: "Brain dump",
     plans: "Plans",
     calendar: "Calendar",
     direction: "Direction",
