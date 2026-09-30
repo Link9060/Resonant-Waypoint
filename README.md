@@ -1,46 +1,59 @@
 # Resonant Waypoint
 
-Waypoint is ARROW's intention and execution layer.
-
-Its job is to turn messy thoughts, commitments, ideas, goals, and time constraints into a clear direction and a realistic next move.
+Waypoint is ARROW's intention and execution layer. It turns messy thoughts, commitments, ideas, goals, and time constraints into clear direction and realistic next moves, using RAVIN as its reasoning layer.
 
 ## Core structure
 
-- **Today** — what deserves attention now
-- **Capture** — unstructured thoughts interpreted by RAVIN into clarity, priorities, routes, and proposed actions
-- **Plans** — projects, goals, milestones, and next actions
-- **Calendar** — time blocks, deadlines, events, and routines
-- **Direction** — priorities, horizons, values, and larger goals
-- **Review** — progress, patterns, postponed work, and reflection
+- **Today** — work due now, including overdue unresolved items
+- **Capture** — free-form input interpreted by RAVIN into intent, signals, a route, questions, and proposed structured changes
+- **Plans** — projects, future actions, parked ideas, and next moves
+- **Calendar** — dated events and time commitments shared across ARROW
+- **Direction** — account-backed goals and longer-range direction
+- **Review** — current planning state and recent Capture history
 
-## Design identity
+## Production data model
 
-The Waypoint mark is a **Beacon**: a bright central destination point surrounded by thin signal rings.
+Waypoint uses ARROW's universal Supabase account and Row Level Security.
 
-Dark-first, glassy, minimal, and consistent with the broader ARROW family.
+- Shared actionable tasks live in `todos`.
+- Shared dated events live in `relay_calendar_events`.
+- Shared notes live in `notes`.
+- Waypoint-specific projects, goals, future actions, and later items live in `waypoint_items`.
+- Capture interpretations and application history live in `waypoint_captures`.
+- All Waypoint tables use owner-only RLS policies.
+- Capture application uses per-user idempotency keys so a retry does not duplicate tasks, events, or notes.
+- Older browser-only Waypoint library data is migrated into the account-backed tables on startup.
 
 ## Capture flow
 
-The first prototype already supports:
+1. Write the unorganized version of what is going on.
+2. RAVIN reads the Capture against the user's existing tasks, calendar, projects, goals, and parked work.
+3. RAVIN identifies intent, priorities, dependencies, conflicts, constraints, opportunities, a recommended route, and unresolved questions.
+4. Waypoint saves the interpretation to the user's Capture history.
+5. The user reviews and selects proposed changes.
+6. Nothing is applied until the user approves it.
+7. Approved items are routed to Today, Plans, Calendar, Direction, Notes, or Later.
+8. Writes are idempotent and account-backed, so the same planning state follows the user across devices.
 
-1. Capture the messy, unorganized version of what is going on.
-2. RAVIN reads the Capture against existing Waypoint context, then identifies intent, priorities, dependencies, conflicts, questions, a recommended route, and structured items.
-3. Review the interpretation.
-4. Nothing changes until the user approves it.
-5. Approved tasks can be moved into Today.
+A lightweight local classifier remains only as a fallback when the RAVIN service is unavailable.
 
-RAVIN is the primary reasoning layer. A lightweight local classifier remains only as a fallback when the AI service is unavailable.
+## Reliability and security
 
-## GitHub Pages
+- Universal ARROW authentication is required before Waypoint loads.
+- Browser requests retry once after refreshing an expired ARROW session.
+- Supabase requests and RAVIN inference have bounded timeouts.
+- RAVIN's Waypoint endpoint is authenticated, payload-limited, origin-restricted, and rate-limited per account.
+- Production writes are protected against accidental double-submit.
+- `scripts/production-check.mjs` rejects known prototype regressions.
+- Pull requests run locked dependency install, critical dependency audit, production checks, TypeScript, and a full static export build.
+- Waypoint is pinned to Next.js 16.3.7.
 
-This repository is configured for static Next.js export and GitHub Pages.
+## Deployment
 
-- `.github/workflows/deploy-pages.yml` builds and deploys on pushes to `main`.
-- `.github/workflows/check.yml` validates pull requests.
-- `next.config.ts` automatically applies the `/Resonant-Waypoint` base path when building in GitHub Actions.
+The live ARROW deployment is:
 
-Expected Pages URL:
+- `https://enterarrow.com/waypoint/`
+- Waypoint static upstream: Render, branch `enterarrow-domain`
+- RAVIN intelligence upstream: Render, `Project-R.A.V.I.N.-1.1` branch `deployment-prep`
 
-`https://link9060.github.io/Resonant-Waypoint/`
-
-In GitHub, set **Settings → Pages → Source** to **GitHub Actions** once if Pages has not already been enabled.
+The repository also retains GitHub Pages support for development/backup builds. The live ARROW product should be tested through `enterarrow.com`, where the universal gateway and auth shell are present.
