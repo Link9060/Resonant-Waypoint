@@ -1,4 +1,4 @@
-import type { CapturedItem } from "./types";
+import type { CapturedItem, TodayItem, WaypointRouteStep, WaypointSignal } from "./types";
 
 const SUPABASE_URL = "https://cnorozrjugxpanpfmssa.supabase.co";
 const SUPABASE_KEY = "sb_publishable_yVNPiB7opT0WRvBfKTZ2BA_s5bOQLRg";
@@ -14,9 +14,20 @@ type ArrowSession = {
 
 export type WaypointInterpretation = {
   summary: string;
+  intent?: string | null;
+  next_move?: string | null;
+  signals: WaypointSignal[];
+  route: WaypointRouteStep[];
+  questions: string[];
   items: CapturedItem[];
   model?: string | null;
-  source: "ravin";
+  source: "ravin" | "local";
+};
+
+export type WaypointContext = {
+  tasks: TodayItem[];
+  events: Array<{ id: string; title: string; date: string; time?: string }>;
+  library: CapturedItem[];
 };
 
 function readSession(): ArrowSession | null {
@@ -82,7 +93,10 @@ function localDateParts(now = new Date()) {
   };
 }
 
-export async function interpretWithRavin(input: string): Promise<WaypointInterpretation> {
+export async function interpretWithRavin(
+  input: string,
+  context: WaypointContext
+): Promise<WaypointInterpretation> {
   const token = await getAccessToken();
   const now = localDateParts();
 
@@ -98,12 +112,18 @@ export async function interpretWithRavin(input: string): Promise<WaypointInterpr
       current_date: now.date,
       local_time: now.time,
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+      context,
     }),
   });
 
   const data = await response.json().catch(() => ({})) as {
     error?: string;
     summary?: string;
+    intent?: string | null;
+    next_move?: string | null;
+    signals?: WaypointSignal[];
+    route?: WaypointRouteStep[];
+    questions?: string[];
     items?: CapturedItem[];
     model?: string | null;
     source?: string;
@@ -113,13 +133,22 @@ export async function interpretWithRavin(input: string): Promise<WaypointInterpr
     throw new Error(data.error || `RAVIN request failed (HTTP ${response.status}).`);
   }
 
-  if (!Array.isArray(data.items) || !data.items.length) {
-    throw new Error("RAVIN returned no Waypoint items.");
+  const items = Array.isArray(data.items) ? data.items : [];
+  const route = Array.isArray(data.route) ? data.route : [];
+  const questions = Array.isArray(data.questions) ? data.questions : [];
+
+  if (!items.length && !route.length && !questions.length) {
+    throw new Error("RAVIN returned no useful Waypoint interpretation.");
   }
 
   return {
-    summary: data.summary || `RAVIN found ${data.items.length} items.`,
-    items: data.items.map((item, index) => ({
+    summary: data.summary || "RAVIN organized the capture into a clearer route.",
+    intent: data.intent || null,
+    next_move: data.next_move || null,
+    signals: Array.isArray(data.signals) ? data.signals : [],
+    route,
+    questions,
+    items: items.map((item, index) => ({
       ...item,
       id: item.id || `ravin-${Date.now()}-${index}`,
       accepted: item.accepted !== false,
