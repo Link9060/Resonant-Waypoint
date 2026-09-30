@@ -14,13 +14,21 @@ import {
 } from "./icons";
 import { interpretBrainDump } from "@/lib/brain-dump";
 import {
+  archiveSharedWaypointItem,
   createSharedArrowNote,
   createSharedCalendarEvent,
   createSharedTodo,
   interpretWithRavin,
   loadSharedPlanningData,
+  markSharedWaypointCaptureApplied,
+  migrateLegacyWaypointItems,
   openRavinFromWaypoint,
+  saveSharedWaypointCapture,
   setSharedTodoCompleted,
+  upsertSharedWaypointItems,
+  waypointRowToCapturedItem,
+  type ArrowTodo,
+  type ArrowWaypointCapture,
   type WaypointInterpretation,
 } from "@/lib/ravin";
 import type { CapturedItem, TodayItem, WaypointTab } from "@/lib/types";
@@ -57,11 +65,12 @@ function safeJsonList<T>(key: string): T[] {
 
 function dueMeta(dueOn: string) {
   if (dueOn === localIsoDate(0)) return "Due today";
-  return `Due ${new Date(`${dueOn}T12:00:00`).toLocaleDateString([], {
+  const label = new Date(`${dueOn}T12:00:00`).toLocaleDateString([], {
     weekday: "short",
     month: "short",
     day: "numeric",
-  })}`;
+  });
+  return dueOn < localIsoDate(0) ? `Overdue · ${label}` : `Due ${label}`;
 }
 
 function localIsoDate(offsetDays = 0) {
@@ -80,11 +89,15 @@ function resolveCaptureDate(item: CapturedItem) {
   if (when === "tomorrow") return localIsoDate(1);
 
   const weekdays = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+  const isNextWeekday = when.startsWith("next ");
   const target = weekdays.indexOf(when.replace(/^next\s+/, ""));
   if (target >= 0) {
     const date = new Date();
-    const delta = (target - date.getDay() + 7) % 7 || 7;
-    return localIsoDate(when.startsWith("next ") ? delta + 7 : delta);
+    const rawDelta = (target - date.getDay() + 7) % 7;
+    const delta = isNextWeekday
+      ? rawDelta === 0 ? 7 : rawDelta + 7
+      : rawDelta === 0 ? 7 : rawDelta;
+    return localIsoDate(delta);
   }
 
   const parsed = new Date(item.when || "");
@@ -96,10 +109,14 @@ export function WaypointShell() {
   const [dump, setDump] = useState("");
   const [captures, setCaptures] = useState<CapturedItem[]>([]);
   const [todayItems, setTodayItems] = useState(initialToday);
+  const [sharedTodos, setSharedTodos] = useState<ArrowTodo[]>([]);
   const [events, setEvents] = useState<SharedEvent[]>([]);
   const [libraryItems, setLibraryItems] = useState<CapturedItem[]>([]);
+  const [captureHistory, setCaptureHistory] = useState<ArrowWaypointCapture[]>([]);
+  const [activeCaptureId, setActiveCaptureId] = useState<string | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(true);
+  const [isApplyingCapture, setIsApplyingCapture] = useState(false);
   const [isInterpreting, setIsInterpreting] = useState(false);
   const [interpretation, setInterpretation] = useState<WaypointInterpretation | null>(null);
 
@@ -107,7 +124,13 @@ export function WaypointShell() {
     setSyncing(true);
     try {
       const shared = await loadSharedPlanningData();
-      setTodayItems(shared.todos.map((task) => ({
+      const today = localIsoDate(0);
+      const todayTodos = shared.todos.filter((task) =>
+        task.due_on === today || (!task.completed && task.due_on < today)
+      );
+
+      setSharedTodos(shared.todos);
+      setTodayItems(todayTodos.map((task) => ({
         id: task.id,
         title: task.title,
         meta: dueMeta(task.due_on),
@@ -119,6 +142,8 @@ export function WaypointShell() {
         date: event.event_date,
         time: event.start_time?.slice(0, 5) || "",
       })));
+      setLibraryItems(shared.items.map(waypointRowToCapturedItem));
+      setCaptureHistory(shared.captures);
       setSyncError(null);
     } catch (error) {
       setSyncError(error instanceof Error ? error.message : "Waypoint could not sync ARROW planning data.");
@@ -134,28 +159,37 @@ export function WaypointShell() {
       setActiveTab(tab as WaypointTab);
     }
 
-    setLibraryItems(
-      safeJsonList<CapturedItem>(LIBRARY_KEY)
-        .filter((item) => typeof item.id === "string" && typeof item.title === "string")
-    );
+    let cancelled = false;
+    const bootstrap = async () => {
+      const legacy = safeJsonList<CapturedItem>(LIBRARY_KEY)
+        .filter((item) => typeof item.id === "string" && typeof item.title === "string");
 
-    void refreshSharedPlanning();
+      if (legacy.length) {
+        try {
+          await migrateLegacyWaypointItems(legacy);
+          if (!cancelled) localStorage.removeItem(LIBRARY_KEY);
+        } catch (error) {
+          if (!cancelled) {
+            setSyncError(error instanceof Error ? error.message : "Waypoint could not migrate older local planning data.");
+          }
+        }
+      }
+
+      if (!cancelled) await refreshSharedPlanning();
+    };
+
+    void bootstrap();
 
     const refresh = () => void refreshSharedPlanning();
     const onStorage = (event: StorageEvent) => {
       if (event.key === "arrow_shared_data_ping_v1") refresh();
-      if (event.key === LIBRARY_KEY) {
-        setLibraryItems(
-          safeJsonList<CapturedItem>(LIBRARY_KEY)
-            .filter((item) => typeof item.id === "string" && typeof item.title === "string")
-        );
-      }
     };
 
     window.addEventListener("storage", onStorage);
     window.addEventListener("arrow:planning-changed", refresh);
     window.addEventListener("focus", refresh);
     return () => {
+      cancelled = true;
       window.removeEventListener("storage", onStorage);
       window.removeEventListener("arrow:planning-changed", refresh);
       window.removeEventListener("focus", refresh);
@@ -169,15 +203,31 @@ export function WaypointShell() {
     if (!dump.trim() || isInterpreting) return;
     setIsInterpreting(true);
     setInterpretation(null);
+    setActiveCaptureId(null);
+
+    const sourceKey = `capture:${crypto.randomUUID()}`;
 
     try {
       const result = await interpretWithRavin(dump, {
-        tasks: todayItems,
+        tasks: sharedTodos.map((task) => ({
+          id: task.id,
+          title: task.title,
+          meta: dueMeta(task.due_on),
+          completed: task.completed,
+        })),
         events,
         library: libraryItems,
       });
       setCaptures(result.items);
       setInterpretation(result);
+
+      try {
+        const saved = await saveSharedWaypointCapture(dump, result, sourceKey);
+        setActiveCaptureId(saved?.id || null);
+        await refreshSharedPlanning();
+      } catch (saveError) {
+        setSyncError(saveError instanceof Error ? saveError.message : "Waypoint could not save this Capture history.");
+      }
     } catch (error) {
       const fallback = interpretBrainDump(dump);
       const fallbackInterpretation: WaypointInterpretation = {
@@ -197,6 +247,14 @@ export function WaypointShell() {
       };
       setCaptures(fallback);
       setInterpretation(fallbackInterpretation);
+
+      try {
+        const saved = await saveSharedWaypointCapture(dump, fallbackInterpretation, sourceKey);
+        setActiveCaptureId(saved?.id || null);
+        await refreshSharedPlanning();
+      } catch (saveError) {
+        setSyncError(saveError instanceof Error ? saveError.message : "Waypoint could not save this Capture history.");
+      }
     } finally {
       setIsInterpreting(false);
     }
@@ -210,7 +268,7 @@ export function WaypointShell() {
 
   async function acceptCaptures() {
     const accepted = captures.filter((item) => item.accepted);
-    if (!accepted.length) return;
+    if (!accepted.length || isApplyingCapture) return;
 
     const todayTasks = accepted
       .filter((item) => item.type === "task" && (!item.placement || item.placement === "today"));
@@ -220,7 +278,7 @@ export function WaypointShell() {
       const date = resolveCaptureDate(item);
       if (!date) return [];
       return [{
-        id: item.id,
+        sourceKey: `waypoint:${item.id}`,
         title: item.title,
         date,
         time: item.time || "",
@@ -235,14 +293,20 @@ export function WaypointShell() {
 
     const notes = accepted.filter((item) => item.type === "note");
 
-    setSyncing(true);
+    setIsApplyingCapture(true);
+    setSyncError(null);
     try {
       await Promise.all([
         ...todayTasks.map((item) =>
-          createSharedTodo(item.title, resolveCaptureDate(item) || localIsoDate(0))
+          createSharedTodo(
+            item.title,
+            resolveCaptureDate(item) || localIsoDate(0),
+            `waypoint:${item.id}`,
+            item.duration_minutes || null,
+          )
         ),
         ...capturedEvents.map((event) =>
-          createSharedCalendarEvent(event.title, event.date, event.time || "")
+          createSharedCalendarEvent(event.title, event.date, event.time || "", event.sourceKey)
         ),
         ...notes.map((item) =>
           createSharedArrowNote(
@@ -250,15 +314,13 @@ export function WaypointShell() {
             [item.context, item.why, item.when ? `Timing: ${item.when}` : ""]
               .filter(Boolean)
               .join("\n") || item.title,
+            `waypoint:${item.id}`,
           )
         ),
+        upsertSharedWaypointItems(libraryAdds, activeCaptureId),
       ]);
 
-      if (libraryAdds.length) {
-        const nextLibrary = [...libraryItems, ...libraryAdds];
-        setLibraryItems(nextLibrary);
-        localStorage.setItem(LIBRARY_KEY, JSON.stringify(nextLibrary));
-      }
+      if (activeCaptureId) await markSharedWaypointCaptureApplied(activeCaptureId);
 
       await refreshSharedPlanning();
       window.dispatchEvent(new CustomEvent("arrow:planning-changed"));
@@ -273,11 +335,12 @@ export function WaypointShell() {
       setDump("");
       setCaptures([]);
       setInterpretation(null);
+      setActiveCaptureId(null);
       setActiveTab(nextTab);
     } catch (error) {
       setSyncError(error instanceof Error ? error.message : "Waypoint could not save that route to ARROW.");
     } finally {
-      setSyncing(false);
+      setIsApplyingCapture(false);
     }
   }
 
@@ -301,6 +364,21 @@ export function WaypointShell() {
     () => captures.filter((item) => item.accepted).length,
     [captures]
   );
+
+  const futureTodos = useMemo(
+    () => sharedTodos.filter((task) => !task.completed && task.due_on > localIsoDate(0)),
+    [sharedTodos]
+  );
+
+  async function archiveWaypointItem(item: CapturedItem) {
+    const sourceKey = item.id.startsWith("waypoint:") ? item.id : `waypoint:${item.id}`;
+    try {
+      await archiveSharedWaypointItem(sourceKey);
+      await refreshSharedPlanning();
+    } catch (error) {
+      setSyncError(error instanceof Error ? error.message : "Waypoint could not archive that item.");
+    }
+  }
 
   return (
     <main className="waypoint-app">
@@ -385,7 +463,10 @@ export function WaypointShell() {
         <div className="content">
           {(syncError || syncing) && (
             <div className={`waypoint-sync-state ${syncError ? "error" : ""}`}>
-              {syncError || "Syncing shared ARROW planning…"}
+              <span>{syncError || "Syncing Waypoint with your ARROW account…"}</span>
+              {syncError ? (
+                <button type="button" onClick={() => void refreshSharedPlanning()}>Retry</button>
+              ) : null}
             </div>
           )}
           {activeTab === "today" && (
@@ -407,6 +488,7 @@ export function WaypointShell() {
               acceptCaptures={acceptCaptures}
               acceptedCount={acceptedCount}
               isInterpreting={isInterpreting}
+              isApplying={isApplyingCapture}
               interpretation={interpretation}
             />
           )}
@@ -414,6 +496,8 @@ export function WaypointShell() {
           {activeTab === "plans" && (
             <PlansView
               items={libraryItems}
+              futureTodos={futureTodos}
+              onArchive={archiveWaypointItem}
               onNewPlan={() => {
                 setDump("I want to plan: ");
                 setActiveTab("dump");
@@ -421,9 +505,17 @@ export function WaypointShell() {
             />
           )}
           {activeTab === "calendar" && <CalendarView events={events} />}
-          {activeTab === "direction" && <DirectionView items={libraryItems} />}
+          {activeTab === "direction" && (
+            <DirectionView items={libraryItems} onArchive={archiveWaypointItem} />
+          )}
           {activeTab === "review" && (
-            <ReviewView items={todayItems} libraryItems={libraryItems} events={events} />
+            <ReviewView
+              items={todayItems}
+              allTodos={sharedTodos}
+              libraryItems={libraryItems}
+              events={events}
+              captures={captureHistory}
+            />
           )}
         </div>
       </section>
@@ -550,6 +642,7 @@ function DumpView({
   acceptCaptures,
   acceptedCount,
   isInterpreting,
+  isApplying,
   interpretation
 }: {
   dump: string;
@@ -560,6 +653,7 @@ function DumpView({
   acceptCaptures: () => void;
   acceptedCount: number;
   isInterpreting: boolean;
+  isApplying: boolean;
   interpretation: WaypointInterpretation | null;
 }) {
   return (
@@ -738,9 +832,9 @@ function DumpView({
                 <button
                   className="primary-button"
                   onClick={acceptCaptures}
-                  disabled={!acceptedCount}
+                  disabled={!acceptedCount || isApplying}
                 >
-                  Apply selected
+                  {isApplying ? "Applying…" : "Apply selected"}
                 </button>
               </div>
             </section>
@@ -764,9 +858,13 @@ function DumpView({
 
 function PlansView({
   items,
+  futureTodos,
+  onArchive,
   onNewPlan
 }: {
   items: CapturedItem[];
+  futureTodos: ArrowTodo[];
+  onArchive: (item: CapturedItem) => void | Promise<void>;
   onNewPlan: () => void;
 }) {
   const projects = items.filter((item) => item.type === "project");
@@ -785,16 +883,16 @@ function PlansView({
           <article className="panel plan-card" key={plan.id}>
             <div className="plan-top">
               <BeaconIcon size={28} />
-              <span>0%</span>
+              <span>{(plan.priority || "medium").toUpperCase()}</span>
             </div>
             <h3>{plan.title}</h3>
-            <div className="mini-progress">
-              <span style={{ width: "0%" }} />
-            </div>
             <div className="next-step">
               <small>NEXT MOVE</small>
               <strong>{plan.context || "Choose the first concrete action."}</strong>
             </div>
+            <button className="row-action" type="button" onClick={() => void onArchive(plan)}>
+              Archive
+            </button>
           </article>
         ))}
 
@@ -818,16 +916,28 @@ function PlansView({
         </button>
       </div>
 
-      {upcoming.length ? (
+      {(upcoming.length || futureTodos.length) ? (
         <section className="panel capture-panel">
           <div className="panel-heading">
             <div>
               <div className="eyebrow">UPCOMING MOVES</div>
               <h3>Useful, just not for Today.</h3>
             </div>
-            <span className="soft-pill">{upcoming.length}</span>
+            <span className="soft-pill">{upcoming.length + futureTodos.length}</span>
           </div>
           <div className="capture-list">
+            {futureTodos.map((task) => (
+              <div className="capture-row selected" key={task.id}>
+                <span className="type-dot type-task" />
+                <span className="capture-copy">
+                  <strong>{task.title}</strong>
+                  <small>{dueMeta(task.due_on)}</small>
+                </span>
+                <button className="row-action compact" type="button" onClick={() => void onArchive(item)}>
+                  Archive
+                </button>
+              </div>
+            ))}
             {upcoming.map((item) => (
               <div className="capture-row selected" key={item.id}>
                 <span className={`type-dot type-${item.type}`} />
@@ -864,7 +974,9 @@ function PlansView({
                   <strong>{item.title}</strong>
                   <small>{item.type}{item.when ? ` · ${item.when}` : ""}</small>
                 </span>
-                <span className="capture-check">•</span>
+                <button className="row-action compact" type="button" onClick={() => void onArchive(item)}>
+                  Archive
+                </button>
               </div>
             ))}
           </div>
@@ -878,7 +990,8 @@ function CalendarView({ events }: { events: SharedEvent[] }) {
   const today = new Date();
   today.setHours(12, 0, 0, 0);
   const start = new Date(today);
-  start.setDate(today.getDate() - today.getDay() + 1);
+  const mondayOffset = (today.getDay() + 6) % 7;
+  start.setDate(today.getDate() - mondayOffset);
 
   const days = Array.from({ length: 7 }, (_, index) => {
     const date = new Date(start);
@@ -924,7 +1037,13 @@ function CalendarView({ events }: { events: SharedEvent[] }) {
   );
 }
 
-function DirectionView({ items }: { items: CapturedItem[] }) {
+function DirectionView({
+  items,
+  onArchive
+}: {
+  items: CapturedItem[];
+  onArchive: (item: CapturedItem) => void | Promise<void>;
+}) {
   const goals = items.filter((item) => item.type === "goal");
 
   return (
@@ -952,6 +1071,9 @@ function DirectionView({ items }: { items: CapturedItem[] }) {
           <div className="horizon-row" key={goal.id}>
             <span>{goal.when ? goal.when.toUpperCase() : `GOAL ${index + 1}`}</span>
             <strong>{goal.title}</strong>
+            <button className="row-action compact" type="button" onClick={() => void onArchive(goal)}>
+              Archive
+            </button>
           </div>
         )) : (
           <div className="horizon-row">
@@ -966,14 +1088,18 @@ function DirectionView({ items }: { items: CapturedItem[] }) {
 
 function ReviewView({
   items,
+  allTodos,
   libraryItems,
-  events
+  events,
+  captures
 }: {
   items: TodayItem[];
+  allTodos: ArrowTodo[];
   libraryItems: CapturedItem[];
   events: SharedEvent[];
+  captures: ArrowWaypointCapture[];
 }) {
-  const completed = items.filter((item) => item.completed).length;
+  const completed = allTodos.filter((item) => item.completed).length;
   const projects = libraryItems.filter((item) => item.type === "project");
   const goals = libraryItems.filter((item) => item.type === "goal");
   const postponed = libraryItems.filter((item) => item.type === "later");
@@ -986,7 +1112,7 @@ function ReviewView({
       </section>
       <section className="panel metric-card">
         <span className="metric">{projects.length}</span>
-        <small>active plans captured</small>
+        <small>active plans</small>
       </section>
       <section className="panel metric-card">
         <span className="metric">{postponed.length}</span>
@@ -994,15 +1120,15 @@ function ReviewView({
       </section>
 
       <section className="panel review-story">
-        <div className="eyebrow">REAL DATA</div>
+        <div className="eyebrow">CURRENT STATE</div>
         <h2>What is actually in motion?</h2>
         <p>
-          This prototype review uses your real Waypoint data instead of placeholder scores.
-          As Waypoint grows, RAVIN can turn this into a weekly reflection and pattern report.
+          Waypoint reads the same account-backed planning data across ARROW, so this view follows
+          you between devices instead of being tied to one browser.
         </p>
 
         <div className="review-line">
-          <span>Open moves</span>
+          <span>Open today / overdue</span>
           <strong>{items.filter((item) => !item.completed).length}</strong>
         </div>
         <div className="review-line">
@@ -1013,6 +1139,39 @@ function ReviewView({
           <span>Calendar</span>
           <strong>{events.length ? `${events.length} saved event${events.length === 1 ? "" : "s"}` : "No saved events yet"}</strong>
         </div>
+      </section>
+
+      <section className="panel capture-history">
+        <div className="panel-heading">
+          <div>
+            <div className="eyebrow">CAPTURE HISTORY</div>
+            <h3>Recent reasoning</h3>
+          </div>
+          <span className="soft-pill">{captures.length}</span>
+        </div>
+        {captures.length ? (
+          <div className="capture-history-list">
+            {captures.slice(0, 8).map((capture) => (
+              <div className="capture-history-row" key={capture.id}>
+                <div>
+                  <strong>{capture.summary || "Capture"}</strong>
+                  <small>
+                    {new Date(capture.created_at).toLocaleString([], {
+                      month: "short",
+                      day: "numeric",
+                      hour: "numeric",
+                      minute: "2-digit"
+                    })}
+                    {capture.applied ? " · applied" : " · reviewed"}
+                  </small>
+                </div>
+                <span>{capture.source === "ravin" ? "RAVIN" : "LOCAL"}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="interpretation-summary">Your recent Captures will appear here.</p>
+        )}
       </section>
     </div>
   );

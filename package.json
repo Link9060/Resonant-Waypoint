@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "node scripts/production-check.mjs && tsc --noEmit",
+    "test": "node scripts/production-check.mjs"
   },
   "dependencies": {
     "next": "16.3.3",
