@@ -24,6 +24,7 @@ export type CapturedItem = {
   context?: string | null;
   why?: string | null;
   priority?: "low" | "medium" | "high";
+  placement?: "today" | "plans" | "calendar" | "direction" | "notes" | "later";
   duration_minutes?: number | null;
   depends_on?: string[];
   accepted?: boolean;
