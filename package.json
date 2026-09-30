@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "typecheck": "node scripts/production-check.mjs && tsc --noEmit",
+    "typecheck": "node scripts/production-check.mjs && npm run security-check && tsc --noEmit",
     "test": "node scripts/production-check.mjs",
     "security-check": "npm audit --audit-level=critical"
   },
