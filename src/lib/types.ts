@@ -18,8 +18,11 @@ export type CapturedItem = {
   id: string;
   title: string;
   type: CapturedItemType;
-  when?: string;
-  context?: string;
+  when?: string | null;
+  date?: string | null;
+  time?: string | null;
+  context?: string | null;
+  priority?: "low" | "medium" | "high";
   accepted?: boolean;
 };
 
