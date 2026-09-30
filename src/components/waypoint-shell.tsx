@@ -185,8 +185,8 @@ export function WaypointShell() {
   function acceptCaptures() {
     const accepted = captures.filter((item) => item.accepted);
 
-    const tasks = accepted
-      .filter((item) => item.type === "task")
+    const todayTasks = accepted
+      .filter((item) => item.type === "task" && (!item.placement || item.placement === "today"))
       .map((item) => {
         const timing = [item.date, item.time].filter(Boolean).join(" ");
         return {
@@ -196,12 +196,12 @@ export function WaypointShell() {
             ? `Captured · ${timing}`
             : item.when
               ? `Captured · ${item.when}`
-              : "Captured from Capture"
+              : "Captured"
         };
       });
 
-    if (tasks.length) {
-      setTodayItems((current) => [...current, ...tasks]);
+    if (todayTasks.length) {
+      setTodayItems((current) => [...current, ...todayTasks]);
     }
 
     const capturedEvents: SharedEvent[] = accepted.flatMap((item) => {
@@ -223,7 +223,12 @@ export function WaypointShell() {
       window.dispatchEvent(new CustomEvent("arrow-os:datachange", { detail: { key: EVENTS_KEY, value: nextEvents } }));
     }
 
-    const libraryAdds = accepted.filter((item) => !["task", "event"].includes(item.type));
+    const libraryAdds = accepted.filter((item) => {
+      if (item.type === "event") return false;
+      if (item.type === "task" && (!item.placement || item.placement === "today")) return false;
+      return true;
+    });
+
     if (libraryAdds.length) {
       const nextLibrary = [...libraryItems, ...libraryAdds];
       setLibraryItems(nextLibrary);
@@ -240,10 +245,10 @@ export function WaypointShell() {
     }
 
     const nextTab: WaypointTab =
-      tasks.length ? "today"
+      todayTasks.length ? "today"
         : capturedEvents.length ? "calendar"
-          : accepted.some((item) => item.type === "project" || item.type === "note" || item.type === "later") ? "plans"
-            : accepted.some((item) => item.type === "goal") ? "direction"
+          : accepted.some((item) => item.placement === "plans" || item.type === "project" || item.type === "later") ? "plans"
+            : accepted.some((item) => item.placement === "direction" || item.type === "goal") ? "direction"
               : "today";
 
     setDump("");
@@ -676,6 +681,7 @@ function DumpView({
                       <small>
                         {item.type}
                         {item.priority ? ` · ${item.priority}` : ""}
+                        {item.placement ? ` · → ${item.placement}` : ""}
                         {item.when ? ` · ${item.when}` : ""}
                         {item.duration_minutes ? ` · ~${item.duration_minutes} min` : ""}
                       </small>
@@ -727,6 +733,7 @@ function PlansView({
   onNewPlan: () => void;
 }) {
   const projects = items.filter((item) => item.type === "project");
+  const upcoming = items.filter((item) => item.type === "task" && item.placement !== "today");
   const loose = items.filter((item) => item.type === "note" || item.type === "later");
 
   return (
@@ -773,6 +780,35 @@ function PlansView({
           <span>New plan</span>
         </button>
       </div>
+
+      {upcoming.length ? (
+        <section className="panel capture-panel">
+          <div className="panel-heading">
+            <div>
+              <div className="eyebrow">UPCOMING MOVES</div>
+              <h3>Useful, just not for Today.</h3>
+            </div>
+            <span className="soft-pill">{upcoming.length}</span>
+          </div>
+          <div className="capture-list">
+            {upcoming.map((item) => (
+              <div className="capture-row selected" key={item.id}>
+                <span className={`type-dot type-${item.type}`} />
+                <span className="capture-copy">
+                  <strong>{item.title}</strong>
+                  <small>
+                    {item.priority || "medium"}
+                    {item.when ? ` · ${item.when}` : ""}
+                    {item.duration_minutes ? ` · ~${item.duration_minutes} min` : ""}
+                  </small>
+                  {item.context ? <em>{item.context}</em> : null}
+                </span>
+                <span className="capture-check">→</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {loose.length ? (
         <section className="panel capture-panel">
