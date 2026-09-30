@@ -102,10 +102,15 @@ export function WaypointShell() {
 
     void refreshPlanning({ migrate: true });
     const refresh = () => void refreshPlanning();
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === "arrow_shared_data_ping_v1") refresh();
+    };
     window.addEventListener("arrow:planning-changed", refresh);
+    window.addEventListener("storage", onStorage);
     window.addEventListener("focus", refresh);
     return () => {
       window.removeEventListener("arrow:planning-changed", refresh);
+      window.removeEventListener("storage", onStorage);
       window.removeEventListener("focus", refresh);
     };
   }, []);
