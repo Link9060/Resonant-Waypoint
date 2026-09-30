@@ -933,9 +933,7 @@ function PlansView({
                   <strong>{task.title}</strong>
                   <small>{dueMeta(task.due_on)}</small>
                 </span>
-                <button className="row-action compact" type="button" onClick={() => void onArchive(item)}>
-                  Archive
-                </button>
+                <span className="capture-check">→</span>
               </div>
             ))}
             {upcoming.map((item) => (
