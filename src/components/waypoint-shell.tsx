@@ -883,7 +883,7 @@ function DirectionView({ items }: { items: CapturedItem[] }) {
         )) : (
           <div className="horizon-row">
             <span>EMPTY</span>
-            <strong>Capture a goal in Dump and RAVIN will place it here.</strong>
+            <strong>Capture a goal and RAVIN will place it here.</strong>
           </div>
         )}
       </section>
