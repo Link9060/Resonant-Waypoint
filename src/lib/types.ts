@@ -27,5 +27,6 @@ export type TodayItem = {
   id: string;
   title: string;
   meta: string;
+  dueOn?: string;
   completed?: boolean;
 };
