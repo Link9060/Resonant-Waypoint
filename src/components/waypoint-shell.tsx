@@ -76,8 +76,7 @@ export function WaypointShell() {
         id: task.id,
         title: task.title,
         meta: dueMeta(task.due_on),
-        completed: task.completed,
-        dueOn: task.due_on
+        completed: task.completed
       })));
       setEvents(shared.events.map((event) => ({
         id: event.id,
