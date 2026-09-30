@@ -13,6 +13,16 @@ import {
   TodayIcon
 } from "./icons";
 import { interpretBrainDump } from "@/lib/brain-dump";
+import {
+  createCalendarEvent,
+  createSharedNote,
+  createTodo,
+  loadPlanningData,
+  migrateLegacyPlanningData,
+  openRavinFromWaypoint,
+  resolveDueDate,
+  setTodoCompleted
+} from "@/lib/arrow-data";
 import type { CapturedItem, TodayItem, WaypointTab } from "@/lib/types";
 
 const tabs = [
@@ -26,8 +36,6 @@ const tabs = [
 
 const initialToday: TodayItem[] = [];
 
-const TASKS_KEY = "arrow_os_tasks_v1";
-const EVENTS_KEY = "arrow_os_events_v1";
 const ORBIT_URL = "https://link9060.github.io/Resonant-Orbit/";
 
 type SharedEvent = {
@@ -37,13 +45,11 @@ type SharedEvent = {
   time?: string;
 };
 
-function safeJsonList<T>(key: string): T[] {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(key) || "[]");
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
+function dueMeta(dueOn: string) {
+  const today = new Date();
+  const localToday = new Date(today.getTime() - today.getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
+  if (dueOn === localToday) return "Due today";
+  return `Due ${new Date(`${dueOn}T12:00:00`).toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })}`;
 }
 
 const samplePlans = [
@@ -58,7 +64,34 @@ export function WaypointShell() {
   const [captures, setCaptures] = useState<CapturedItem[]>([]);
   const [todayItems, setTodayItems] = useState(initialToday);
   const [events, setEvents] = useState<SharedEvent[]>([]);
-  const [storageReady, setStorageReady] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(true);
+
+  async function refreshPlanning({ migrate = false } = {}) {
+    setSyncing(true);
+    try {
+      if (migrate) await migrateLegacyPlanningData();
+      const shared = await loadPlanningData();
+      setTodayItems(shared.todos.map((task) => ({
+        id: task.id,
+        title: task.title,
+        meta: dueMeta(task.due_on),
+        completed: task.completed,
+        dueOn: task.due_on
+      })));
+      setEvents(shared.events.map((event) => ({
+        id: event.id,
+        title: event.title,
+        date: event.event_date,
+        time: event.start_time?.slice(0, 5) || ""
+      })));
+      setSyncError(null);
+    } catch (error) {
+      setSyncError(error instanceof Error ? error.message : "Waypoint could not sync ARROW data.");
+    } finally {
+      setSyncing(false);
+    }
+  }
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -67,45 +100,15 @@ export function WaypointShell() {
       setActiveTab(tab as WaypointTab);
     }
 
-    const loadShared = () => {
-      const sharedTasks = safeJsonList<{ id?: string; text?: string; done?: boolean; createdAt?: number }>(TASKS_KEY)
-        .filter((task) => typeof task.id === "string" && typeof task.text === "string");
-      if (sharedTasks.length) {
-        setTodayItems(sharedTasks.map((task) => ({
-          id: task.id!,
-          title: task.text!,
-          meta: "ARROW task",
-          completed: Boolean(task.done),
-        })));
-      }
-
-      setEvents(
-        safeJsonList<SharedEvent>(EVENTS_KEY)
-          .filter((event) => typeof event.id === "string" && typeof event.title === "string" && typeof event.date === "string")
-      );
-      setStorageReady(true);
-    };
-
-    loadShared();
-    const refresh = () => loadShared();
-    window.addEventListener("storage", refresh);
-    window.addEventListener("arrow-os:datachange", refresh as EventListener);
+    void refreshPlanning({ migrate: true });
+    const refresh = () => void refreshPlanning();
+    window.addEventListener("arrow:planning-changed", refresh);
+    window.addEventListener("focus", refresh);
     return () => {
-      window.removeEventListener("storage", refresh);
-      window.removeEventListener("arrow-os:datachange", refresh as EventListener);
+      window.removeEventListener("arrow:planning-changed", refresh);
+      window.removeEventListener("focus", refresh);
     };
   }, []);
-
-  useEffect(() => {
-    if (!storageReady) return;
-    const sharedTasks = todayItems.map((item) => ({
-      id: item.id,
-      text: item.title,
-      done: Boolean(item.completed),
-      createdAt: Date.now(),
-    }));
-    localStorage.setItem(TASKS_KEY, JSON.stringify(sharedTasks));
-  }, [storageReady, todayItems]);
 
   const completed = todayItems.filter((item) => item.completed).length;
   const progress = todayItems.length ? Math.round((completed / todayItems.length) * 100) : 0;
@@ -121,42 +124,54 @@ export function WaypointShell() {
     );
   }
 
-  function acceptCaptures() {
-    const tasks = captures
-      .filter((item) => item.accepted && item.type === "task")
-      .map((item) => ({
-        id: `today-${item.id}`,
-        title: item.title,
-        meta: item.when ? `Captured · ${item.when}` : "Captured from Dump"
+  async function acceptCaptures() {
+    const selected = captures.filter((item) => item.accepted);
+    if (!selected.length) return;
+
+    setSyncing(true);
+    try {
+      await Promise.all(selected.map(async (item) => {
+        if (item.type === "task") {
+          await createTodo(item.title, resolveDueDate(item.when));
+          return;
+        }
+        if (item.type === "event") {
+          await createCalendarEvent(item.title, resolveDueDate(item.when));
+          return;
+        }
+
+        const label = item.type.toUpperCase();
+        const context = [`Captured in Waypoint as ${label}.`, item.when ? `Timing: ${item.when}.` : "", item.context || ""]
+          .filter(Boolean)
+          .join(" ");
+        await createSharedNote(item.title, context || item.title);
       }));
 
-    if (tasks.length) {
-      setTodayItems((current) => [...current, ...tasks]);
+      setDump("");
+      setCaptures([]);
+      setActiveTab("today");
+      await refreshPlanning();
+      window.dispatchEvent(new CustomEvent("arrow:planning-changed"));
+    } catch (error) {
+      setSyncError(error instanceof Error ? error.message : "Waypoint could not save your captures.");
+    } finally {
+      setSyncing(false);
     }
+  }
 
-    const capturedEvents: SharedEvent[] = captures
-      .filter((item) => item.accepted && item.type === "event" && item.when)
-      .map((item) => {
-        const parsed = new Date(item.when!);
-        const validDate = !Number.isNaN(parsed.getTime());
-        return {
-          id: `event-${item.id}`,
-          title: item.title,
-          date: validDate ? parsed.toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
-          time: validDate ? parsed.toTimeString().slice(0, 5) : "",
-        };
-      });
-
-    if (capturedEvents.length) {
-      const nextEvents = [...events, ...capturedEvents];
-      setEvents(nextEvents);
-      localStorage.setItem(EVENTS_KEY, JSON.stringify(nextEvents));
-      window.dispatchEvent(new CustomEvent("arrow-os:datachange", { detail: { key: EVENTS_KEY, value: nextEvents } }));
+  async function toggleTodayItem(id: string, completed: boolean) {
+    setTodayItems((current) =>
+      current.map((item) => item.id === id ? { ...item, completed } : item)
+    );
+    try {
+      await setTodoCompleted(id, completed);
+      window.dispatchEvent(new CustomEvent("arrow:planning-changed"));
+    } catch (error) {
+      setTodayItems((current) =>
+        current.map((item) => item.id === id ? { ...item, completed: !completed } : item)
+      );
+      setSyncError(error instanceof Error ? error.message : "Waypoint could not update that task.");
     }
-
-    setDump("");
-    setCaptures([]);
-    setActiveTab("today");
   }
 
   const acceptedCount = useMemo(
@@ -237,7 +252,7 @@ export function WaypointShell() {
             <button className="icon-button" aria-label="Quick add" onClick={() => setActiveTab("dump")}>
               <PlusIcon width={18} height={18} />
             </button>
-            <button className="ravin-chip" onClick={() => setActiveTab("dump")}>
+            <button className="ravin-chip" onClick={() => openRavinFromWaypoint()}>
               <SparkIcon width={16} height={16} />
               Ask RAVIN
             </button>
@@ -245,10 +260,15 @@ export function WaypointShell() {
         </header>
 
         <div className="content">
+          {(syncError || syncing) && (
+            <div className={`waypoint-sync-state ${syncError ? "error" : ""}`}>
+              {syncError || "Syncing with ARROW…"}
+            </div>
+          )}
           {activeTab === "today" && (
             <TodayView
               items={todayItems}
-              setItems={setTodayItems}
+              onToggle={toggleTodayItem}
               progress={progress}
               onDump={() => setActiveTab("dump")}
             />
@@ -278,12 +298,12 @@ export function WaypointShell() {
 
 function TodayView({
   items,
-  setItems,
+  onToggle,
   progress,
   onDump
 }: {
   items: TodayItem[];
-  setItems: React.Dispatch<React.SetStateAction<TodayItem[]>>;
+  onToggle: (id: string, completed: boolean) => void;
   progress: number;
   onDump: () => void;
 }) {
@@ -331,15 +351,7 @@ function TodayView({
             <button
               className={`task-row ${item.completed ? "done" : ""}`}
               key={item.id}
-              onClick={() =>
-                setItems((current) =>
-                  current.map((currentItem) =>
-                    currentItem.id === item.id
-                      ? { ...currentItem, completed: !currentItem.completed }
-                      : currentItem
-                  )
-                )
-              }
+              onClick={() => void onToggle(item.id, !item.completed)}
             >
               <span className="task-index">
                 {String(index + 1).padStart(2, "0")}
