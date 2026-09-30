@@ -321,3 +321,21 @@ button { color: inherit; }
   .dump-prompt .beacon-icon { margin-bottom:18px; }
   .direction-hero { min-height:460px; padding:28px; }
 }
+
+
+/* ARROW shared-data sync status */
+.waypoint-sync-state {
+  margin: 0 0 12px;
+  padding: 8px 11px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--muted, #8f8f98);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.waypoint-sync-state.error {
+  border-color: rgba(255, 130, 130, 0.24);
+  color: #d9a0a0;
+}
