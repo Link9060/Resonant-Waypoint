@@ -7,10 +7,11 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "node scripts/production-check.mjs && tsc --noEmit",
-    "test": "node scripts/production-check.mjs"
+    "test": "node scripts/production-check.mjs",
+    "security-check": "npm audit --audit-level=critical"
   },
   "dependencies": {
-    "next": "16.3.3",
+    "next": "16.3.7",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },
