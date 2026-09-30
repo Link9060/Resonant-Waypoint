@@ -489,3 +489,20 @@ button { color: inherit; }
   .route-row { grid-template-columns: 30px 1fr; }
   .route-timing { grid-column: 2; justify-self: start; }
 }
+
+
+.waypoint-sync-state {
+  margin: 0 0 12px;
+  padding: 8px 11px;
+  border: 1px solid rgba(255,255,255,.08);
+  border-radius: 10px;
+  background: rgba(255,255,255,.035);
+  color: var(--muted, #8f8f98);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.waypoint-sync-state.error {
+  border-color: rgba(255,130,130,.24);
+  color: #d9a0a0;
+}
