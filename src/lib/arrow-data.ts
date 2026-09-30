@@ -100,6 +100,10 @@ async function request<T>(
     throw new Error(payload?.message || payload?.error || "ARROW data request failed.");
   }
 
+  if ((options.method || "GET").toUpperCase() !== "GET") {
+    try { localStorage.setItem("arrow_shared_data_ping_v1", String(Date.now())); } catch {}
+  }
+
   if (response.status === 204) return null as T;
   const text = await response.text();
   return (text ? JSON.parse(text) : null) as T;
