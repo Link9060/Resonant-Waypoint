@@ -13,6 +13,7 @@ import {
   TodayIcon
 } from "./icons";
 import { interpretBrainDump } from "@/lib/brain-dump";
+import { interpretWithRavin } from "@/lib/ravin";
 import type { CapturedItem, TodayItem, WaypointTab } from "@/lib/types";
 
 const tabs = [
@@ -28,6 +29,8 @@ const initialToday: TodayItem[] = [];
 
 const TASKS_KEY = "arrow_os_tasks_v1";
 const EVENTS_KEY = "arrow_os_events_v1";
+const NOTES_KEY = "arrow_os_notes_v1";
+const LIBRARY_KEY = "waypoint_library_v1";
 const ORBIT_URL = "/orbit/";
 
 type SharedEvent = {
@@ -46,11 +49,32 @@ function safeJsonList<T>(key: string): T[] {
   }
 }
 
-const samplePlans = [
-  { title: "Build Waypoint", progress: 12, next: "Define the first working brain-dump flow" },
-  { title: "ARROW ecosystem", progress: 38, next: "Connect Waypoint into the ARROW shell" },
-  { title: "Personal direction", progress: 5, next: "Add the first long-range horizon" }
-];
+function localIsoDate(offsetDays = 0) {
+  const date = new Date();
+  date.setHours(12, 0, 0, 0);
+  date.setDate(date.getDate() + offsetDays);
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+function resolveCaptureDate(item: CapturedItem) {
+  if (item.date && /^\d{4}-\d{2}-\d{2}$/.test(item.date)) return item.date;
+  const when = String(item.when || "").trim().toLowerCase();
+  if (!when) return null;
+  if (when === "today" || when === "tonight") return localIsoDate(0);
+  if (when === "tomorrow") return localIsoDate(1);
+
+  const weekdays = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+  const target = weekdays.indexOf(when.replace(/^next\s+/, ""));
+  if (target >= 0) {
+    const date = new Date();
+    const delta = (target - date.getDay() + 7) % 7 || 7;
+    return localIsoDate(when.startsWith("next ") ? delta + 7 : delta);
+  }
+
+  const parsed = new Date(item.when || "");
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString().slice(0, 10);
+}
 
 export function WaypointShell() {
   const [activeTab, setActiveTab] = useState<WaypointTab>("today");
@@ -58,7 +82,11 @@ export function WaypointShell() {
   const [captures, setCaptures] = useState<CapturedItem[]>([]);
   const [todayItems, setTodayItems] = useState(initialToday);
   const [events, setEvents] = useState<SharedEvent[]>([]);
+  const [libraryItems, setLibraryItems] = useState<CapturedItem[]>([]);
   const [storageReady, setStorageReady] = useState(false);
+  const [isInterpreting, setIsInterpreting] = useState(false);
+  const [interpretationSource, setInterpretationSource] = useState<"ravin" | "local" | null>(null);
+  const [interpretationSummary, setInterpretationSummary] = useState("");
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -70,18 +98,20 @@ export function WaypointShell() {
     const loadShared = () => {
       const sharedTasks = safeJsonList<{ id?: string; text?: string; done?: boolean; createdAt?: number }>(TASKS_KEY)
         .filter((task) => typeof task.id === "string" && typeof task.text === "string");
-      if (sharedTasks.length) {
-        setTodayItems(sharedTasks.map((task) => ({
-          id: task.id!,
-          title: task.text!,
-          meta: "ARROW task",
-          completed: Boolean(task.done),
-        })));
-      }
+      setTodayItems(sharedTasks.map((task) => ({
+        id: task.id!,
+        title: task.text!,
+        meta: "ARROW task",
+        completed: Boolean(task.done),
+      })));
 
       setEvents(
         safeJsonList<SharedEvent>(EVENTS_KEY)
           .filter((event) => typeof event.id === "string" && typeof event.title === "string" && typeof event.date === "string")
+      );
+      setLibraryItems(
+        safeJsonList<CapturedItem>(LIBRARY_KEY)
+          .filter((item) => typeof item.id === "string" && typeof item.title === "string")
       );
       setStorageReady(true);
     };
@@ -110,9 +140,26 @@ export function WaypointShell() {
   const completed = todayItems.filter((item) => item.completed).length;
   const progress = todayItems.length ? Math.round((completed / todayItems.length) * 100) : 0;
 
-  function processDump() {
-    const result = interpretBrainDump(dump);
-    setCaptures(result);
+  async function processDump() {
+    if (!dump.trim() || isInterpreting) return;
+    setIsInterpreting(true);
+    setInterpretationSummary("");
+
+    try {
+      const result = await interpretWithRavin(dump);
+      setCaptures(result.items);
+      setInterpretationSource("ravin");
+      setInterpretationSummary(result.summary);
+    } catch (error) {
+      const fallback = interpretBrainDump(dump);
+      setCaptures(fallback);
+      setInterpretationSource("local");
+      setInterpretationSummary(
+        `RAVIN is unavailable right now, so Waypoint used its local sorter instead. ${error instanceof Error ? error.message : ""}`.trim()
+      );
+    } finally {
+      setIsInterpreting(false);
+    }
   }
 
   function toggleCapture(id: string) {
@@ -122,30 +169,38 @@ export function WaypointShell() {
   }
 
   function acceptCaptures() {
-    const tasks = captures
-      .filter((item) => item.accepted && item.type === "task")
-      .map((item) => ({
-        id: `today-${item.id}`,
-        title: item.title,
-        meta: item.when ? `Captured · ${item.when}` : "Captured from Dump"
-      }));
+    const accepted = captures.filter((item) => item.accepted);
+
+    const tasks = accepted
+      .filter((item) => item.type === "task")
+      .map((item) => {
+        const timing = [item.date, item.time].filter(Boolean).join(" ");
+        return {
+          id: `today-${item.id}`,
+          title: item.title,
+          meta: timing
+            ? `Captured · ${timing}`
+            : item.when
+              ? `Captured · ${item.when}`
+              : "Captured from Dump"
+        };
+      });
 
     if (tasks.length) {
       setTodayItems((current) => [...current, ...tasks]);
     }
 
-    const capturedEvents: SharedEvent[] = captures
-      .filter((item) => item.accepted && item.type === "event" && item.when)
-      .map((item) => {
-        const parsed = new Date(item.when!);
-        const validDate = !Number.isNaN(parsed.getTime());
-        return {
-          id: `event-${item.id}`,
-          title: item.title,
-          date: validDate ? parsed.toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
-          time: validDate ? parsed.toTimeString().slice(0, 5) : "",
-        };
-      });
+    const capturedEvents: SharedEvent[] = accepted.flatMap((item) => {
+      if (item.type !== "event") return [];
+      const date = resolveCaptureDate(item);
+      if (!date) return [];
+      return [{
+        id: `event-${item.id}`,
+        title: item.title,
+        date,
+        time: item.time || "",
+      }];
+    });
 
     if (capturedEvents.length) {
       const nextEvents = [...events, ...capturedEvents];
@@ -154,9 +209,34 @@ export function WaypointShell() {
       window.dispatchEvent(new CustomEvent("arrow-os:datachange", { detail: { key: EVENTS_KEY, value: nextEvents } }));
     }
 
+    const libraryAdds = accepted.filter((item) => !["task", "event"].includes(item.type));
+    if (libraryAdds.length) {
+      const nextLibrary = [...libraryItems, ...libraryAdds];
+      setLibraryItems(nextLibrary);
+      localStorage.setItem(LIBRARY_KEY, JSON.stringify(nextLibrary));
+    }
+
+    const notes = accepted.filter((item) => item.type === "note");
+    if (notes.length) {
+      const currentNotes = localStorage.getItem(NOTES_KEY) || "";
+      const addition = notes.map((item) => `• ${item.title}`).join("\n");
+      const nextNotes = [currentNotes.trim(), addition].filter(Boolean).join("\n\n");
+      localStorage.setItem(NOTES_KEY, nextNotes);
+      window.dispatchEvent(new CustomEvent("arrow-os:datachange", { detail: { key: NOTES_KEY, value: nextNotes } }));
+    }
+
+    const nextTab: WaypointTab =
+      tasks.length ? "today"
+        : capturedEvents.length ? "calendar"
+          : accepted.some((item) => item.type === "project" || item.type === "note" || item.type === "later") ? "plans"
+            : accepted.some((item) => item.type === "goal") ? "direction"
+              : "today";
+
     setDump("");
     setCaptures([]);
-    setActiveTab("today");
+    setInterpretationSource(null);
+    setInterpretationSummary("");
+    setActiveTab(nextTab);
   }
 
   const acceptedCount = useMemo(
@@ -263,13 +343,26 @@ export function WaypointShell() {
               toggleCapture={toggleCapture}
               acceptCaptures={acceptCaptures}
               acceptedCount={acceptedCount}
+              isInterpreting={isInterpreting}
+              interpretationSource={interpretationSource}
+              interpretationSummary={interpretationSummary}
             />
           )}
 
-          {activeTab === "plans" && <PlansView />}
+          {activeTab === "plans" && (
+            <PlansView
+              items={libraryItems}
+              onNewPlan={() => {
+                setDump("I want to plan: ");
+                setActiveTab("dump");
+              }}
+            />
+          )}
           {activeTab === "calendar" && <CalendarView events={events} />}
-          {activeTab === "direction" && <DirectionView />}
-          {activeTab === "review" && <ReviewView />}
+          {activeTab === "direction" && <DirectionView items={libraryItems} />}
+          {activeTab === "review" && (
+            <ReviewView items={todayItems} libraryItems={libraryItems} events={events} />
+          )}
         </div>
       </section>
     </main>
@@ -401,15 +494,21 @@ function DumpView({
   processDump,
   toggleCapture,
   acceptCaptures,
-  acceptedCount
+  acceptedCount,
+  isInterpreting,
+  interpretationSource,
+  interpretationSummary
 }: {
   dump: string;
   setDump: (value: string) => void;
   captures: CapturedItem[];
-  processDump: () => void;
+  processDump: () => void | Promise<void>;
   toggleCapture: (id: string) => void;
   acceptCaptures: () => void;
   acceptedCount: number;
+  isInterpreting: boolean;
+  interpretationSource: "ravin" | "local" | null;
+  interpretationSummary: string;
 }) {
   return (
     <div className="dump-layout">
@@ -441,11 +540,11 @@ function DumpView({
           </span>
           <button
             className="primary-button"
-            disabled={!dump.trim()}
+            disabled={!dump.trim() || isInterpreting}
             onClick={processDump}
           >
             <SparkIcon width={17} height={17} />
-            Make sense of this
+            {isInterpreting ? "RAVIN is sorting…" : "Make sense of this"}
           </button>
         </div>
       </section>
@@ -454,8 +553,13 @@ function DumpView({
         <section className="panel capture-panel">
           <div className="panel-heading">
             <div>
-              <div className="eyebrow">RAVIN INTERPRETATION</div>
+              <div className="eyebrow">
+                {interpretationSource === "ravin" ? "RAVIN INTERPRETATION" : "LOCAL FALLBACK"}
+              </div>
               <h3>I found {captures.length} things.</h3>
+              {interpretationSummary ? (
+                <p className="interpretation-summary">{interpretationSummary}</p>
+              ) : null}
             </div>
             <span className="soft-pill">{acceptedCount} selected</span>
           </div>
@@ -496,7 +600,16 @@ function DumpView({
   );
 }
 
-function PlansView() {
+function PlansView({
+  items,
+  onNewPlan
+}: {
+  items: CapturedItem[];
+  onNewPlan: () => void;
+}) {
+  const projects = items.filter((item) => item.type === "project");
+  const loose = items.filter((item) => item.type === "note" || item.type === "later");
+
   return (
     <div className="stack">
       <section className="section-intro">
@@ -505,28 +618,66 @@ function PlansView() {
       </section>
 
       <div className="plan-grid">
-        {samplePlans.map((plan) => (
-          <article className="panel plan-card" key={plan.title}>
+        {projects.map((plan) => (
+          <article className="panel plan-card" key={plan.id}>
             <div className="plan-top">
               <BeaconIcon size={28} />
-              <span>{plan.progress}%</span>
+              <span>0%</span>
             </div>
             <h3>{plan.title}</h3>
             <div className="mini-progress">
-              <span style={{ width: `${plan.progress}%` }} />
+              <span style={{ width: "0%" }} />
             </div>
             <div className="next-step">
               <small>NEXT MOVE</small>
-              <strong>{plan.next}</strong>
+              <strong>{plan.context || "Choose the first concrete action."}</strong>
             </div>
           </article>
         ))}
 
-        <button className="panel new-plan-card">
+        {!projects.length ? (
+          <article className="panel plan-card">
+            <div className="plan-top">
+              <BeaconIcon size={28} />
+              <span>READY</span>
+            </div>
+            <h3>No active plans yet.</h3>
+            <div className="next-step">
+              <small>START HERE</small>
+              <strong>Dump a project or goal and RAVIN will pull out the route.</strong>
+            </div>
+          </article>
+        ) : null}
+
+        <button className="panel new-plan-card" onClick={onNewPlan}>
           <PlusIcon width={22} height={22} />
           <span>New plan</span>
         </button>
       </div>
+
+      {loose.length ? (
+        <section className="panel capture-panel">
+          <div className="panel-heading">
+            <div>
+              <div className="eyebrow">PARKED</div>
+              <h3>Notes + later</h3>
+            </div>
+            <span className="soft-pill">{loose.length}</span>
+          </div>
+          <div className="capture-list">
+            {loose.map((item) => (
+              <div className="capture-row selected" key={item.id}>
+                <span className={`type-dot type-${item.type}`} />
+                <span className="capture-copy">
+                  <strong>{item.title}</strong>
+                  <small>{item.type}{item.when ? ` · ${item.when}` : ""}</small>
+                </span>
+                <span className="capture-check">•</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 }
@@ -581,7 +732,9 @@ function CalendarView({ events }: { events: SharedEvent[] }) {
   );
 }
 
-function DirectionView() {
+function DirectionView({ items }: { items: CapturedItem[] }) {
+  const goals = items.filter((item) => item.type === "goal");
+
   return (
     <div className="direction-layout">
       <section className="panel direction-hero">
@@ -599,61 +752,74 @@ function DirectionView() {
         <div className="panel-heading">
           <div>
             <div className="eyebrow">HORIZONS</div>
-            <h3>Near → Far</h3>
+            <h3>Directions worth moving toward</h3>
           </div>
         </div>
 
-        {[
-          ["NOW", "Get the important stuff under control"],
-          ["NEAR", "Build things that actually work"],
-          ["NEXT", "Become genuinely capable at engineering"],
-          ["FAR", "Create work and products that matter"]
-        ].map(([range, copy]) => (
-          <div className="horizon-row" key={range}>
-            <span>{range}</span>
-            <strong>{copy}</strong>
+        {goals.length ? goals.map((goal, index) => (
+          <div className="horizon-row" key={goal.id}>
+            <span>{goal.when ? goal.when.toUpperCase() : `GOAL ${index + 1}`}</span>
+            <strong>{goal.title}</strong>
           </div>
-        ))}
+        )) : (
+          <div className="horizon-row">
+            <span>EMPTY</span>
+            <strong>Capture a goal in Dump and RAVIN will place it here.</strong>
+          </div>
+        )}
       </section>
     </div>
   );
 }
 
-function ReviewView() {
+function ReviewView({
+  items,
+  libraryItems,
+  events
+}: {
+  items: TodayItem[];
+  libraryItems: CapturedItem[];
+  events: SharedEvent[];
+}) {
+  const completed = items.filter((item) => item.completed).length;
+  const projects = libraryItems.filter((item) => item.type === "project");
+  const goals = libraryItems.filter((item) => item.type === "goal");
+  const postponed = libraryItems.filter((item) => item.type === "later");
+
   return (
     <div className="review-grid">
       <section className="panel metric-card">
-        <span className="metric">12</span>
+        <span className="metric">{completed}</span>
         <small>moves completed</small>
       </section>
       <section className="panel metric-card">
-        <span className="metric">3</span>
-        <small>plans advanced</small>
+        <span className="metric">{projects.length}</span>
+        <small>active plans captured</small>
       </section>
       <section className="panel metric-card">
-        <span className="metric">2</span>
-        <small>things repeatedly postponed</small>
+        <span className="metric">{postponed.length}</span>
+        <small>things intentionally parked</small>
       </section>
 
       <section className="panel review-story">
-        <div className="eyebrow">THIS WEEK</div>
-        <h2>What actually happened?</h2>
+        <div className="eyebrow">REAL DATA</div>
+        <h2>What is actually in motion?</h2>
         <p>
-          Waypoint should reflect reality, not grade you. Reviews surface where your time went,
-          what moved, what stalled, and what you may want to change.
+          This prototype review uses your real Waypoint data instead of placeholder scores.
+          As Waypoint grows, RAVIN can turn this into a weekly reflection and pattern report.
         </p>
 
         <div className="review-line">
-          <span>Most attention</span>
-          <strong>ARROW</strong>
+          <span>Open moves</span>
+          <strong>{items.filter((item) => !item.completed).length}</strong>
         </div>
         <div className="review-line">
-          <span>Lost momentum</span>
-          <strong>Personal projects</strong>
+          <span>Direction</span>
+          <strong>{goals.length ? `${goals.length} saved goal${goals.length === 1 ? "" : "s"}` : "No saved goals yet"}</strong>
         </div>
         <div className="review-line">
-          <span>Worth reconsidering</span>
-          <strong>2 postponed items</strong>
+          <span>Calendar</span>
+          <strong>{events.length ? `${events.length} saved event${events.length === 1 ? "" : "s"}` : "No saved events yet"}</strong>
         </div>
       </section>
     </div>

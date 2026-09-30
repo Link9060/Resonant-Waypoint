@@ -321,3 +321,15 @@ button { color: inherit; }
   .dump-prompt .beacon-icon { margin-bottom:18px; }
   .direction-hero { min-height:460px; padding:28px; }
 }
+
+.interpretation-summary {
+  margin: 7px 0 0;
+  max-width: 620px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.capture-row:not(button) {
+  cursor: default;
+}
