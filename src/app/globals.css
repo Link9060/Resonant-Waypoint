@@ -604,3 +604,40 @@ button { color: inherit; }
 .calendar-week-controls {margin-bottom:20px;}
 .time-block button {float:right;background:none;border:0;color:inherit;font-size:20px;cursor:pointer;}
 @media(max-width:700px) {.planning-editor form,.planning-task-editor-list {grid-template-columns:1fr;}.week-row {overflow:auto;grid-template-columns:repeat(7,minmax(140px,1fr));}}
+
+.planning-window { display:flex; gap:12px; flex-wrap:wrap; align-items:end; }
+.planning-window label { display:grid; gap:8px; }
+.schedule-preview { display:grid; gap:10px; margin:16px 0; }
+.schedule-preview label { display:flex; gap:12px; align-items:center; padding:12px; border:1px solid var(--line,#ffffff20); border-radius:12px; }
+.schedule-preview span { display:grid; gap:6px; }
+.schedule-preview small { font-size:14px; opacity:.75; }
+.planning-task-editor-list { max-height:320px; overflow:auto; }
+
+/* Light mode applies to the full planning workspace, including native controls. */
+:root[data-arrow-theme="light"] {
+ --bg:#f1f4f9; --panel:#fff; --panel-2:#e8edf5; --surface:#fff;
+ --line:#18223a1c; --line-strong:#18223a35; --text:#172238; --muted:#536079; --faint:#68758a;
+ --accent:var(--arrow-accent-color,#23324d); color-scheme:light;
+}
+:root[data-arrow-theme="light"] .waypoint-app { background:var(--bg); }
+:root[data-arrow-theme="light"] .sidebar { background:#ffffffb8; }
+:root[data-arrow-theme="light"] :is(.panel,.hero-panel,.planning-editor) { background:#fff; box-shadow:0 8px 30px #23324d08; }
+:root[data-arrow-theme="light"] :is(.task-row,.capture-row,.horizon-row,.review-line,.capture-history-row,.day-column) { border-color:var(--line); }
+:root[data-arrow-theme="light"] :is(.nav-item.active,.nav-item:hover,.time-block.visible,.capture-row.selected) { background:#dfe7f3; color:var(--text); }
+:root[data-arrow-theme="light"] :is(.primary-button,.nav-plus) { background:#24324b; color:#fff; border-color:#24324b; }
+:root[data-arrow-theme="light"] .brain-textarea { background:#f7f9fc; color:var(--text); border-color:var(--line-strong); }
+:root[data-arrow-theme="light"] .brain-textarea::placeholder { color:var(--faint); }
+:root[data-arrow-theme="light"] :is(.task-check,.orbit-dot) { border-color:#536079; }
+:root[data-arrow-theme="light"] .progress-track { stroke:#ced7e5; }
+:root[data-arrow-theme="light"] .ambient-grid { background-image:linear-gradient(#20304d12 1px,transparent 1px),linear-gradient(90deg,#20304d12 1px,transparent 1px); }
+:root[data-arrow-experience="quiet"] .waypoint-app { background:var(--bg); }
+:root[data-arrow-experience="quiet"] :is(.ambient-grid,.ambient-glow,.progress-orbit) { display:none; }
+:root[data-arrow-experience="quiet"] .today-grid { grid-template-columns:minmax(0,1.6fr) minmax(260px,1fr); }
+:root[data-arrow-experience="dynamic"] .waypoint-app { background:radial-gradient(at 85% 0%,rgba(var(--arrow-accent-rgb),.15),transparent 65%),var(--bg); }
+:root[data-arrow-experience="dynamic"] .progress-fill { stroke:var(--arrow-accent-color); }
+:root[data-arrow-experience="glass"] .waypoint-app { background:radial-gradient(at 15% 0%,rgba(var(--arrow-accent-rgb),.2),transparent 65%),var(--bg); }
+:root[data-arrow-experience="glass"] .sidebar { background:rgba(125,140,165,.1); backdrop-filter:blur(30px); }
+.schedule-preview label { display:flex; }
+.schedule-preview input[type="checkbox"] { width:18px; height:18px; padding:0; flex-shrink:0; }
+:root input,:root select { color-scheme:inherit; }
+@media(max-width:700px) {:root[data-arrow-experience="quiet"] .today-grid {grid-template-columns:1fr;}}

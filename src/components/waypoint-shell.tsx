@@ -30,6 +30,7 @@ import {
   upsertSharedWaypointItems,
   waypointRowToCapturedItem,
   type ArrowTodo,
+  type ArrowCalendarEvent,
   type ArrowWaypointCapture,
   type WaypointInterpretation,
 } from "@/lib/ravin";
@@ -117,6 +118,7 @@ export function WaypointShell() {
   const [captureHistory, setCaptureHistory] = useState<ArrowWaypointCapture[]>([]);
   const [activeCaptureId, setActiveCaptureId] = useState<string | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [sharedEvents,setSharedEvents]=useState<ArrowCalendarEvent[]>([]);
   const [syncing, setSyncing] = useState(true);
   const [isApplyingCapture, setIsApplyingCapture] = useState(false);
   const [isInterpreting, setIsInterpreting] = useState(false);
@@ -130,14 +132,15 @@ export function WaypointShell() {
       const today = localIsoDate(0);
       const requestedItem=new URLSearchParams(location.search).get("item");
       const todayTodos = shared.todos.filter((task) =>
-        task.id===requestedItem || !task.due_on || task.due_on === today || (!task.completed && task.due_on < today)
+        task.id===requestedItem || task.scheduled_on===today || !task.due_on || task.due_on === today || (!task.completed && task.due_on < today)
       );
 
       setSharedTodos(shared.todos);
+      setSharedEvents(shared.events);
       setTodayItems(todayTodos.map((task) => ({
         id: task.id,
         title: task.title,
-        meta: task.due_on ? dueMeta(task.due_on) : "No due date",
+        meta: task.scheduled_on===localIsoDate(0)&&task.scheduled_start ? `Scheduled ${task.scheduled_start.slice(0,5)}` : task.due_on ? dueMeta(task.due_on) : "No due date",
         completed: task.completed,
       })));
       setEvents(shared.events.map((event) => ({
@@ -183,6 +186,7 @@ export function WaypointShell() {
     };
 
     void bootstrap();
+    const poll=window.setInterval(()=>{if(!document.hidden)void refreshSharedPlanning();},30000);
 
     const refresh = () => void refreshSharedPlanning();
     const onStorage = (event: StorageEvent) => {
@@ -194,6 +198,7 @@ export function WaypointShell() {
     window.addEventListener("focus", refresh);
     return () => {
       cancelled = true;
+      window.clearInterval(poll);
       window.removeEventListener("storage", onStorage);
       window.removeEventListener("arrow:planning-changed", refresh);
       window.removeEventListener("focus", refresh);
@@ -216,7 +221,7 @@ export function WaypointShell() {
         tasks: sharedTodos.map((task) => ({
           id: task.id,
           title: task.title,
-          meta: task.due_on ? dueMeta(task.due_on) : "No due date",
+          meta: task.scheduled_on===localIsoDate(0)&&task.scheduled_start ? `Scheduled ${task.scheduled_start.slice(0,5)}` : task.due_on ? dueMeta(task.due_on) : "No due date",
           completed: task.completed,
         })),
         events,
@@ -275,7 +280,7 @@ export function WaypointShell() {
     if (!accepted.length || isApplyingCapture) return;
 
     const todayTasks = accepted
-      .filter((item) => item.type === "task" && (!item.placement || item.placement === "today"));
+      .filter((item) => item.type === "task");
 
     const capturedEvents = accepted.flatMap((item) => {
       if (item.type !== "event") return [];
@@ -468,7 +473,7 @@ export function WaypointShell() {
         </header>
 
         <div className="content">
-          <PlanningControls tasks={sharedTodos} onChanged={refreshSharedPlanning} onPlan={()=>{setDump("Build a realistic plan for my open ARROW tasks around my calendar events. Include timed focus blocks, account for deadlines and dependencies, and point out conflicts. Use my existing tasks rather than creating duplicates. ");setActiveTab("dump");}} />
+          <PlanningControls tasks={sharedTodos} events={sharedEvents} plans={libraryItems} onChanged={refreshSharedPlanning} />
           {(syncError || syncing) && (
             <div className={`waypoint-sync-state ${syncError ? "error" : ""}`}>
               <span>{syncError || "Syncing Waypoint with your ARROW account…"}</span>
