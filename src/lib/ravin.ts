@@ -214,9 +214,6 @@ export type ArrowTodo = {
   completed: boolean;
   position: number;
   created_at: string;
-  estimated_minutes: number | null;
-  scheduled_on: string | null;
-  scheduled_start: string | null;
 };
 
 export type ArrowCalendarEvent = {
@@ -300,7 +297,6 @@ async function arrowDataRequest<T>(
 
   if ((options.method || "GET").toUpperCase() !== "GET") {
     try { localStorage.setItem("arrow_shared_data_ping_v1", String(Date.now())); } catch {}
-    window.dispatchEvent(new CustomEvent("arrow:planning-changed"));
   }
 
   if (response.status === 204) return null as T;
@@ -340,8 +336,8 @@ export function waypointRowToCapturedItem(row: ArrowWaypointItem): CapturedItem 
 
 export async function loadSharedPlanningData() {
   const [todos, events, items, captures] = await Promise.all([
-    arrowDataRequest<ArrowTodo[]>("/rest/v1/todos?select=id,title,due_on,completed,position,created_at,estimated_minutes,scheduled_on,scheduled_start&order=completed.asc,due_on.asc.nullslast,position.asc,created_at.asc&limit=500"),
-    arrowDataRequest<ArrowCalendarEvent[]>("/rest/v1/relay_calendar_events?select=id,title,event_date,is_all_day,start_time,end_time,details&order=event_date.asc,start_time.asc&limit=500"),
+    arrowDataRequest<ArrowTodo[]>("/rest/v1/todos?select=id,title,due_on,completed,position,created_at&order=completed.asc,due_on.asc,position.asc,created_at.asc&limit=240"),
+    arrowDataRequest<ArrowCalendarEvent[]>("/rest/v1/relay_calendar_events?select=id,title,event_date,is_all_day,start_time,end_time,details&order=event_date.asc,start_time.asc&limit=240"),
     arrowDataRequest<ArrowWaypointItem[]>("/rest/v1/waypoint_items?status=eq.active&select=id,source_key,capture_id,title,item_type,placement,due_date,due_time,when_text,context,why,priority,duration_minutes,depends_on,status,created_at,updated_at&order=created_at.asc&limit=300"),
     arrowDataRequest<ArrowWaypointCapture[]>("/rest/v1/waypoint_captures?select=id,source_key,raw_input,summary,intent,next_move,signals,route,questions,source,model,applied,applied_at,created_at&order=created_at.desc&limit=24"),
   ]);
@@ -389,7 +385,6 @@ export async function createSharedCalendarEvent(
   eventDate: string,
   startTime = "",
   sourceKey = "",
-  endTime = "",
 ) {
   const path = sourceKey
     ? "/rest/v1/relay_calendar_events?on_conflict=user_id,source_key"
@@ -403,7 +398,6 @@ export async function createSharedCalendarEvent(
       event_date: eventDate,
       is_all_day: !startTime,
       start_time: startTime || null,
-      end_time: endTime || null,
       source_key: sourceKey || null,
     },
   });
@@ -537,28 +531,4 @@ export function openRavinFromWaypoint(prompt = "") {
   url.searchParams.set("surface", "waypoint");
   if (prompt.trim()) url.searchParams.set("prompt", prompt.trim());
   window.location.assign(url.toString());
-}
-
-export async function updateSharedTodo(id: string, changes: {title?: string; due_on?: string; completed?: boolean; estimated_minutes?: number | null; scheduled_on?: string | null; scheduled_start?: string | null}) {
-  return arrowDataRequest(`/rest/v1/todos?id=eq.${encodeURIComponent(id)}&user_id=eq.${encodeURIComponent(arrowUserId())}`, {method:'PATCH',prefer:'return=minimal',body:changes});
-}
-export async function deleteSharedEvent(id: string) {
-  return arrowDataRequest(`/rest/v1/relay_calendar_events?id=eq.${encodeURIComponent(id)}&user_id=eq.${encodeURIComponent(arrowUserId())}`, {method:'DELETE',prefer:'return=minimal'});
-}
-
-export type ScheduleBlock = {task_id:string; title:string; date:string; start:string; end:string; minutes:number; late:boolean};
-export type AutoPlan = {blocks:ScheduleBlock[];unscheduled:{task_id:string;title:string;reason:string}[];conflicts:string[];source:string;generated_at:string};
-export async function generateAutoPlan(start:string,end:string):Promise<AutoPlan> {
-  const response=await authorizedFetch('/ravin/api/waypoint/plan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({start,end,timezone:Intl.DateTimeFormat().resolvedOptions().timeZone})},45000);
-  const data=await response.json();if(!response.ok)throw new Error(data.error||'Could not build your plan.');return data;
-}
-export async function applyScheduleBlock(block:ScheduleBlock) {
-  return arrowDataRequest('/rest/v1/rpc/arrow_schedule_task',{method:'POST',body:{p_task_id:block.task_id,p_date:block.date,p_start:block.start,p_end:block.end}});
-}
-
-export async function updateSharedCalendarEvent(id:string,changes:Pick<ArrowCalendarEvent,'title'|'event_date'|'start_time'|'end_time'|'is_all_day'>) {
-  return arrowDataRequest(`/rest/v1/relay_calendar_events?id=eq.${encodeURIComponent(id)}&user_id=eq.${encodeURIComponent(arrowUserId())}`,{method:'PATCH',prefer:'return=minimal',body:changes});
-}
-export async function updateSharedPlan(sourceKey:string,changes:{title:string;due_date:string|null;due_time:string|null;status:'active'|'completed';duration_minutes:number|null}) {
-  return arrowDataRequest(`/rest/v1/waypoint_items?source_key=eq.${encodeURIComponent(sourceKey)}&user_id=eq.${encodeURIComponent(arrowUserId())}`,{method:'PATCH',prefer:'return=minimal',body:{...changes,updated_at:new Date().toISOString()}});
 }

@@ -13,8 +13,8 @@ export default function RootLayout({
     <html lang="en">
       <head>
         <script src="/arrow-auth-guard.js?v=auth-v2" />
-        <link rel="stylesheet" href="/arrow-shell.css?v=20261001" />
-        <script defer src="/arrow-shell.js?v=20261001" />
+        <link rel="stylesheet" href="/orbit/arrow-shell.css?v=ravin-everywhere-v2" />
+        <script defer src="/orbit/arrow-shell.js?v=ravin-everywhere-v2" />
       </head>
       <body>{children}</body>
     </html>
