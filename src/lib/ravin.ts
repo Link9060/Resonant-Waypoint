@@ -532,7 +532,8 @@ export function openRavinFromWaypoint(prompt = "") {
   const base = ["enterarrow.com", "www.enterarrow.com"].includes(window.location.hostname)
     ? "/ravin/"
     : "https://link9060.github.io/Project-R.A.V.I.N.-1.1/";
-  const url = new URL(base, window.location.href);
+  const resolve=(window as Window & {ArrowOS?:{resolveHref?:(href:string)=>string}}).ArrowOS?.resolveHref;
+  const url = new URL(resolve?resolve('/ravin/'):base, window.location.href);
   url.searchParams.set("from", "waypoint");
   url.searchParams.set("surface", "waypoint");
   if (prompt.trim()) url.searchParams.set("prompt", prompt.trim());
@@ -547,8 +548,13 @@ export async function deleteSharedEvent(id: string) {
 }
 
 export type ScheduleBlock = {task_id:string; title:string; date:string; start:string; end:string; minutes:number; late:boolean};
-export type AutoPlan = {blocks:ScheduleBlock[];unscheduled:{task_id:string;title:string;reason:string}[];conflicts:string[];source:string;generated_at:string};
+export type AutoPlan = {blocks:ScheduleBlock[];unscheduled:{task_id:string;title:string;reason:string}[];conflicts:string[];source:string;generated_at:string;can_apply?:boolean};
 export async function generateAutoPlan(start:string,end:string):Promise<AutoPlan> {
+  if(location.pathname.startsWith('/Resonant-Relay/arrow/')) {
+    const os=(window as Window & {ArrowOS?:{previewPlan?:(start:string,end:string)=>Promise<AutoPlan>}}).ArrowOS;
+    if(!os?.previewPlan)throw new Error('The beta planning tools are still loading. Please retry.');
+    return os.previewPlan(start,end);
+  }
   const response=await authorizedFetch('/ravin/api/waypoint/plan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({start,end,timezone:Intl.DateTimeFormat().resolvedOptions().timeZone})},45000);
   const data=await response.json();if(!response.ok)throw new Error(data.error||'Could not build your plan.');return data;
 }

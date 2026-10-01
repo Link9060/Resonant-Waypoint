@@ -12,9 +12,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        <script src="/arrow-auth-guard.js?v=auth-v2" />
-        <link rel="stylesheet" href="/arrow-shell.css?v=20261001" />
-        <script defer src="/arrow-shell.js?v=20261001" />
+        {!process.env.NEXT_PUBLIC_ARROW_SHELL_BASE?.startsWith("/Resonant-Relay/arrow") && <script src="/arrow-auth-guard.js?v=auth-v2" />}
+        <link rel="stylesheet" href={`${process.env.NEXT_PUBLIC_ARROW_SHELL_BASE || ''}/arrow-shell.css?v=beta-repair-1`} />
+        <script defer src={`${process.env.NEXT_PUBLIC_ARROW_SHELL_BASE || ''}/arrow-shell.js?v=beta-repair-1`} />
       </head>
       <body>{children}</body>
     </html>
