@@ -591,3 +591,16 @@ button { color: inherit; }
   .horizon-row { grid-template-columns:54px minmax(0,1fr); }
   .horizon-row .row-action { grid-column:2; justify-self:start; margin-top:6px; }
 }
+.planning-controls { margin-bottom:20px; }
+.planning-control-bar,.calendar-week-controls { display:flex;gap:10px; flex-wrap:wrap; }
+.planning-control-bar button,.calendar-week-controls button,.planning-editor button { background:var(--surface,#161a23); color:inherit; border:1px solid var(--border,#747f932b); border-radius:10px; padding:10px 14px; font-size:14px; cursor:pointer; }
+.planning-editor { padding:20px; margin-top:12px; border:1px solid #747f9330; border-radius:16px; background:var(--surface,#161a23); }
+.planning-editor form {display:grid;grid-template-columns:1fr 2fr 1fr;gap:12px;align-items:end;}
+.planning-editor label {display:grid;gap:8px;font-size:14px;}
+.planning-editor :is(input,select) {border:1px solid #747f9330;background:transparent;color:inherit;border-radius:8px;padding:12px;width:100%;font:inherit;}
+.planning-task-editor-list {display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:20px;max-height:280px;overflow:auto;}
+.planning-task-editor-list button {display:grid;gap:6px;text-align:left;}
+.planning-task-editor-list small {opacity:.65;}
+.calendar-week-controls {margin-bottom:20px;}
+.time-block button {float:right;background:none;border:0;color:inherit;font-size:20px;cursor:pointer;}
+@media(max-width:700px) {.planning-editor form,.planning-task-editor-list {grid-template-columns:1fr;}.week-row {overflow:auto;grid-template-columns:repeat(7,minmax(140px,1fr));}}

@@ -532,3 +532,10 @@ export function openRavinFromWaypoint(prompt = "") {
   if (prompt.trim()) url.searchParams.set("prompt", prompt.trim());
   window.location.assign(url.toString());
 }
+
+export async function updateSharedTodo(id: string, changes: {title?: string; due_on?: string; completed?: boolean}) {
+  return arrowDataRequest(`/rest/v1/todos?id=eq.${encodeURIComponent(id)}&user_id=eq.${encodeURIComponent(arrowUserId())}`, {method:'PATCH',prefer:'return=minimal',body:changes});
+}
+export async function deleteSharedEvent(id: string) {
+  return arrowDataRequest(`/rest/v1/relay_calendar_events?id=eq.${encodeURIComponent(id)}&user_id=eq.${encodeURIComponent(arrowUserId())}`, {method:'DELETE',prefer:'return=minimal'});
+}

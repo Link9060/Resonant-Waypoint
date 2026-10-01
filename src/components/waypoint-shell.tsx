@@ -1,4 +1,5 @@
 "use client";
+import {PlanningControls} from "./planning-controls";
 
 import { useEffect, useMemo, useState } from "react";
 import { BeaconIcon } from "./beacon-icon";
@@ -15,6 +16,7 @@ import {
 import { interpretBrainDump } from "@/lib/brain-dump";
 import {
   archiveSharedWaypointItem,
+  deleteSharedEvent,
   createSharedArrowNote,
   createSharedCalendarEvent,
   createSharedTodo,
@@ -120,20 +122,22 @@ export function WaypointShell() {
   const [isInterpreting, setIsInterpreting] = useState(false);
   const [interpretation, setInterpretation] = useState<WaypointInterpretation | null>(null);
 
+  const [pendingTasks, setPendingTasks] = useState<Set<string>>(new Set());
   async function refreshSharedPlanning() {
     setSyncing(true);
     try {
       const shared = await loadSharedPlanningData();
       const today = localIsoDate(0);
+      const requestedItem=new URLSearchParams(location.search).get("item");
       const todayTodos = shared.todos.filter((task) =>
-        task.due_on === today || (!task.completed && task.due_on < today)
+        task.id===requestedItem || !task.due_on || task.due_on === today || (!task.completed && task.due_on < today)
       );
 
       setSharedTodos(shared.todos);
       setTodayItems(todayTodos.map((task) => ({
         id: task.id,
         title: task.title,
-        meta: dueMeta(task.due_on),
+        meta: task.due_on ? dueMeta(task.due_on) : "No due date",
         completed: task.completed,
       })));
       setEvents(shared.events.map((event) => ({
@@ -212,7 +216,7 @@ export function WaypointShell() {
         tasks: sharedTodos.map((task) => ({
           id: task.id,
           title: task.title,
-          meta: dueMeta(task.due_on),
+          meta: task.due_on ? dueMeta(task.due_on) : "No due date",
           completed: task.completed,
         })),
         events,
@@ -297,7 +301,7 @@ export function WaypointShell() {
     setSyncError(null);
     try {
       await Promise.all([
-        ...todayTasks.map((item) =>
+        ...todayTasks.filter(item=>!sharedTodos.some(task=>!task.completed&&task.title.trim().toLowerCase()===item.title.trim().toLowerCase())).map((item) =>
           createSharedTodo(
             item.title,
             resolveCaptureDate(item) || localIsoDate(0),
@@ -345,6 +349,8 @@ export function WaypointShell() {
   }
 
   async function toggleTodayItem(id: string, completed: boolean) {
+    if(pendingTasks.has(id))return;
+    setPendingTasks(current=>new Set(current).add(id));
     setTodayItems((current) =>
       current.map((item) => item.id === id ? { ...item, completed } : item)
     );
@@ -357,9 +363,10 @@ export function WaypointShell() {
         current.map((item) => item.id === id ? { ...item, completed: !completed } : item)
       );
       setSyncError(error instanceof Error ? error.message : "Waypoint could not update that task.");
-    }
+    } finally {setPendingTasks(current=>{const next=new Set(current);next.delete(id);return next;});}
   }
 
+  useEffect(()=>{if(syncing)return;const id=new URLSearchParams(location.search).get('item');if(!id)return;const handle=window.setTimeout(()=>document.getElementById('item-'+id)?.scrollIntoView({block:'center',behavior:document.documentElement.dataset.arrowMotion==='reduce'?'auto':'smooth'}),100);return()=>clearTimeout(handle);},[syncing,activeTab]);
   const acceptedCount = useMemo(
     () => captures.filter((item) => item.accepted).length,
     [captures]
@@ -461,6 +468,7 @@ export function WaypointShell() {
         </header>
 
         <div className="content">
+          <PlanningControls tasks={sharedTodos} onChanged={refreshSharedPlanning} onPlan={()=>{setDump("Build a realistic plan for my open ARROW tasks around my calendar events. Include timed focus blocks, account for deadlines and dependencies, and point out conflicts. Use my existing tasks rather than creating duplicates. ");setActiveTab("dump");}} />
           {(syncError || syncing) && (
             <div className={`waypoint-sync-state ${syncError ? "error" : ""}`}>
               <span>{syncError || "Syncing Waypoint with your ARROW account…"}</span>
@@ -504,7 +512,7 @@ export function WaypointShell() {
               }}
             />
           )}
-          {activeTab === "calendar" && <CalendarView events={events} />}
+          {activeTab === "calendar" && <CalendarView events={events} onDelete={async id=>{await deleteSharedEvent(id);await refreshSharedPlanning();}} />}
           {activeTab === "direction" && (
             <DirectionView items={libraryItems} onArchive={archiveWaypointItem} />
           )}
@@ -576,6 +584,7 @@ function TodayView({
         <div className="task-list">
           {items.map((item, index) => (
             <button
+              id={`item-${item.id}`}
               className={`task-row ${item.completed ? "done" : ""}`}
               key={item.id}
               onClick={() => void onToggle(item.id, !item.completed)}
@@ -984,21 +993,23 @@ function PlansView({
   );
 }
 
-function CalendarView({ events }: { events: SharedEvent[] }) {
+function CalendarView({ events, onDelete }: { events: SharedEvent[]; onDelete:(id:string)=>Promise<void> }) {
+  const [week,setWeek]=useState(0);
+  useEffect(()=>{const id=new URLSearchParams(location.search).get('item');const event=events.find(e=>e.id===id);if(event){const target=new Date(event.date+'T12:00:00');const today=new Date();today.setHours(12,0,0,0);const offset=(today.getDay()+6)%7;today.setDate(today.getDate()-offset);setWeek(Math.floor((target.getTime()-today.getTime())/(7*86400000)));}},[events]);const [error,setError]=useState('');const [busy,setBusy]=useState<string|null>(null);
   const today = new Date();
   today.setHours(12, 0, 0, 0);
   const start = new Date(today);
   const mondayOffset = (today.getDay() + 6) % 7;
-  start.setDate(today.getDate() - mondayOffset);
+  start.setDate(today.getDate() - mondayOffset + week * 7);
 
   const days = Array.from({ length: 7 }, (_, index) => {
     const date = new Date(start);
     date.setDate(start.getDate() + index);
-    const iso = date.toISOString().slice(0, 10);
+    const iso = new Date(date.getTime()-date.getTimezoneOffset()*60000).toISOString().slice(0,10);
     return {
       iso,
       label: date.toLocaleDateString([], { weekday: "short", day: "numeric" }).toUpperCase(),
-      isToday: iso === today.toISOString().slice(0, 10),
+      isToday: iso === localIsoDate(0),
       events: events
         .filter((event) => event.date === iso)
         .sort((a, b) => (a.time || "").localeCompare(b.time || "")),
@@ -1013,6 +1024,8 @@ function CalendarView({ events }: { events: SharedEvent[] }) {
       </section>
 
       <section className="panel week-panel">
+        <div className="calendar-week-controls"><button type="button" onClick={()=>setWeek(week-1)}>Previous week</button><button type="button" onClick={()=>setWeek(0)}>This week</button><button type="button" onClick={()=>setWeek(week+1)}>Next week</button></div>
+        {error&&<p role="alert">{error}</p>}
         <div className="week-row">
           {days.map((day) => (
             <div
@@ -1021,8 +1034,8 @@ function CalendarView({ events }: { events: SharedEvent[] }) {
             >
               <div className="day-name">{day.label}</div>
               {day.events.length ? day.events.map((event) => (
-                <div className="time-block visible" key={event.id}>
-                  {event.time ? `${event.time} · ` : ""}{event.title}
+                <div className="time-block visible" id={`item-${event.id}`} key={event.id}>
+                  {event.time ? `${event.time} · ` : ""}{event.title}<button type="button" disabled={busy===event.id} aria-label={`Remove ${event.title}`} onClick={async()=>{if(!confirm(`Remove ${event.title} from your calendar?`))return;setBusy(event.id);setError('');try{await onDelete(event.id);}catch(e){setError(e instanceof Error?e.message:'Could not remove event.');}finally{setBusy(null);}}}>×</button>
                 </div>
               )) : (
                 <div className="time-block muted">Clear</div>
