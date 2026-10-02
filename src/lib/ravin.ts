@@ -342,7 +342,13 @@ export function waypointRowToCapturedItem(row: ArrowWaypointItem): CapturedItem 
 }
 
 export async function loadSharedPlanningData() {
-  const calendar = (window as Window & {ArrowOS?:{loadCalendarSources?:()=>Promise<{events:ArrowCalendarEvent[];warnings:string[]}>}}).ArrowOS?.loadCalendarSources;
+  const calendarLoader = () => (window as Window & {ArrowOS?:{loadCalendarSources?:()=>Promise<{events:ArrowCalendarEvent[];warnings:string[]}>}}).ArrowOS?.loadCalendarSources;
+  let calendar=calendarLoader();
+  if(location.pathname.startsWith('/Resonant-Relay/arrow/waypoint/')) {
+    const deadline=Date.now()+10000;
+    while(!calendar&&Date.now()<deadline){await new Promise(resolve=>setTimeout(resolve,100));calendar=calendarLoader();}
+    if(!calendar)throw new Error('ARROW calendar controls could not start. Refresh to retry.');
+  }
   const [todos, calendarResult, items, captures] = await Promise.all([
     arrowDataRequest<ArrowTodo[]>("/rest/v1/todos?select=id,title,due_on,completed,position,created_at,estimated_minutes,scheduled_on,scheduled_start&order=completed.asc,due_on.asc.nullslast,position.asc,created_at.asc&limit=500"),
     calendar ? calendar() : arrowDataRequest<ArrowCalendarEvent[]>("/rest/v1/relay_calendar_events?select=id,title,event_date,is_all_day,start_time,end_time,details&order=event_date.asc,start_time.asc&limit=500").then(events=>({events,warnings:[] as string[]})),
