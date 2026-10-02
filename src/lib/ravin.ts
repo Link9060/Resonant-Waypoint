@@ -220,6 +220,9 @@ export type ArrowTodo = {
 };
 
 export type ArrowCalendarEvent = {
+  read_only?: boolean;
+  source?: string;
+  source_href?: string;
   id: string;
   title: string;
   event_date: string;
@@ -339,15 +342,17 @@ export function waypointRowToCapturedItem(row: ArrowWaypointItem): CapturedItem 
 }
 
 export async function loadSharedPlanningData() {
-  const [todos, events, items, captures] = await Promise.all([
+  const calendar = (window as Window & {ArrowOS?:{loadCalendarSources?:()=>Promise<{events:ArrowCalendarEvent[];warnings:string[]}>}}).ArrowOS?.loadCalendarSources;
+  const [todos, calendarResult, items, captures] = await Promise.all([
     arrowDataRequest<ArrowTodo[]>("/rest/v1/todos?select=id,title,due_on,completed,position,created_at,estimated_minutes,scheduled_on,scheduled_start&order=completed.asc,due_on.asc.nullslast,position.asc,created_at.asc&limit=500"),
-    arrowDataRequest<ArrowCalendarEvent[]>("/rest/v1/relay_calendar_events?select=id,title,event_date,is_all_day,start_time,end_time,details&order=event_date.asc,start_time.asc&limit=500"),
+    calendar ? calendar() : arrowDataRequest<ArrowCalendarEvent[]>("/rest/v1/relay_calendar_events?select=id,title,event_date,is_all_day,start_time,end_time,details&order=event_date.asc,start_time.asc&limit=500").then(events=>({events,warnings:[] as string[]})),
     arrowDataRequest<ArrowWaypointItem[]>("/rest/v1/waypoint_items?status=eq.active&select=id,source_key,capture_id,title,item_type,placement,due_date,due_time,when_text,context,why,priority,duration_minutes,depends_on,status,created_at,updated_at&order=created_at.asc&limit=300"),
     arrowDataRequest<ArrowWaypointCapture[]>("/rest/v1/waypoint_captures?select=id,source_key,raw_input,summary,intent,next_move,signals,route,questions,source,model,applied,applied_at,created_at&order=created_at.desc&limit=24"),
   ]);
   return {
     todos: todos || [],
-    events: events || [],
+    events: calendarResult.events || [],
+    warnings: calendarResult.warnings || [],
     items: items || [],
     captures: captures || [],
   };

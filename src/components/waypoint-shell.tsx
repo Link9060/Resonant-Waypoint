@@ -51,6 +51,9 @@ const LIBRARY_KEY = "waypoint_library_v1";
 const ORBIT_URL = "/orbit/";
 
 type SharedEvent = {
+  read_only?: boolean;
+  source?: string;
+  source_href?: string;
   id: string;
   title: string;
   date: string;
@@ -145,13 +148,14 @@ export function WaypointShell() {
       })));
       setEvents(shared.events.map((event) => ({
         id: event.id,
+        read_only:event.read_only,source:event.source,source_href:event.source_href,
         title: event.title,
         date: event.event_date,
         time: event.start_time?.slice(0, 5) || "",
       })));
       setLibraryItems(shared.items.map(waypointRowToCapturedItem));
       setCaptureHistory(shared.captures);
-      setSyncError(null);
+      setSyncError(shared.warnings.length?shared.warnings.join(" "):null);
     } catch (error) {
       setSyncError(error instanceof Error ? error.message : "Waypoint could not sync ARROW planning data.");
     } finally {
@@ -1040,7 +1044,7 @@ function CalendarView({ events, onDelete }: { events: SharedEvent[]; onDelete:(i
               <div className="day-name">{day.label}</div>
               {day.events.length ? day.events.map((event) => (
                 <div className="time-block visible" id={`item-${event.id}`} key={event.id}>
-                  {event.time ? `${event.time} · ` : ""}{event.title}<button type="button" disabled={busy===event.id} aria-label={`Remove ${event.title}`} onClick={async()=>{if(!confirm(`Remove ${event.title} from your calendar?`))return;setBusy(event.id);setError('');try{await onDelete(event.id);}catch(e){setError(e instanceof Error?e.message:'Could not remove event.');}finally{setBusy(null);}}}>×</button>
+                  {event.time ? `${event.time} · ` : ""}{event.title}{event.read_only?<a href={event.source_href}>{event.source||"Open source"} ↗</a>:<button type="button" disabled={busy===event.id} aria-label={`Remove ${event.title}`} onClick={async()=>{if(!confirm(`Remove ${event.title} from your calendar?`))return;setBusy(event.id);setError('');try{await onDelete(event.id);}catch(e){setError(e instanceof Error?e.message:'Could not remove event.');}finally{setBusy(null);}}}>×</button>}
                 </div>
               )) : (
                 <div className="time-block muted">Clear</div>
