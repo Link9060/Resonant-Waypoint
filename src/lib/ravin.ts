@@ -45,7 +45,9 @@ function writeSession(session: ArrowSession) {
   } catch {}
 }
 
-async function refreshAccessToken(session = readSession()) {
+let refreshInFlight: { token: string; promise: Promise<string> } | null = null;
+
+async function performRefresh(session: ArrowSession) {
   if (!session?.refresh_token) throw new Error("Your ARROW session expired. Sign in again.");
 
   const controller = new AbortController();
@@ -66,12 +68,26 @@ async function refreshAccessToken(session = readSession()) {
       throw new Error("Your ARROW session expired. Sign in again.");
     }
 
+    const current = readSession();
+    if (!current || current.refresh_token !== session.refresh_token) {
+      throw new Error("Your account changed while refreshing. Sign in again.");
+    }
     const next = { ...session, ...refreshed };
     writeSession(next);
     return next.access_token!;
   } finally {
     window.clearTimeout(timer);
   }
+}
+
+async function refreshAccessToken(session = readSession()) {
+  if (!session?.refresh_token) throw new Error("Your ARROW session expired. Sign in again.");
+  const token = session.refresh_token;
+  if (refreshInFlight?.token === token) return refreshInFlight.promise;
+  const promise = performRefresh(session);
+  refreshInFlight = {token, promise};
+  try { return await promise; }
+  finally { if (refreshInFlight?.promise === promise) refreshInFlight = null; }
 }
 
 export async function getAccessToken(forceRefresh = false) {
@@ -95,6 +111,7 @@ async function authorizedFetch(
   init: RequestInit = {},
   timeoutMs = 15_000,
 ) {
+  const account=(readSession()?.user as {id?:string} | undefined)?.id;
   let token = await getAccessToken();
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -107,13 +124,14 @@ async function authorizedFetch(
       const response = await fetch(url, {
         ...init,
         headers,
-        signal: controller.signal,
+        signal: init.signal ? AbortSignal.any([init.signal, controller.signal]) : controller.signal,
       });
 
       if (response.status === 401 && attempt === 0) {
         token = await getAccessToken(true);
         continue;
       }
+      if ((readSession()?.user as {id?:string} | undefined)?.id !== account) throw new Error("Your account changed. Refresh Waypoint before continuing.");
       return response;
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") {
@@ -301,14 +319,16 @@ async function arrowDataRequest<T>(
     );
   }
 
-  if ((options.method || "GET").toUpperCase() !== "GET") {
-    try { localStorage.setItem("arrow_shared_data_ping_v1", String(Date.now())); } catch {}
-    window.dispatchEvent(new CustomEvent("arrow:planning-changed"));
+  const text = response.status===204 ? '' : await response.text();
+  const data = text ? JSON.parse(text) : null;
+  if ((options.method || 'GET').toUpperCase() === 'PATCH' && (!Array.isArray(data) || !data.length)) {
+    throw new Error('That item no longer exists or could not be updated. Refresh to reload your planning data.');
   }
-
-  if (response.status === 204) return null as T;
-  const text = await response.text();
-  return (text ? JSON.parse(text) : null) as T;
+  if ((options.method || 'GET').toUpperCase() !== 'GET') {
+    try { localStorage.setItem('arrow_shared_data_ping_v1',String(Date.now())); } catch {}
+    window.dispatchEvent(new CustomEvent('arrow:planning-changed'));
+  }
+  return data as T;
 }
 
 function arrowUserId() {
@@ -341,6 +361,17 @@ export function waypointRowToCapturedItem(row: ArrowWaypointItem): CapturedItem 
   };
 }
 
+async function arrowDataAll<T>(path: string): Promise<T[]> {
+  const url = new URL(path,'https://arrow.invalid');
+  const rows: T[] = [];
+  for (let offset=0;;offset+=500) {
+    url.searchParams.set('limit','500');url.searchParams.set('offset',String(offset));
+    const page = await arrowDataRequest<T[]>(url.pathname+url.search);
+    rows.push(...(page ?? []));
+    if ((page?.length ?? 0)<500) return rows;
+  }
+}
+
 export async function loadSharedPlanningData() {
   const calendarLoader = () => (window as Window & {ArrowOS?:{loadCalendarSources?:()=>Promise<{events:ArrowCalendarEvent[];warnings:string[]}>}}).ArrowOS?.loadCalendarSources;
   let calendar=calendarLoader();
@@ -350,9 +381,9 @@ export async function loadSharedPlanningData() {
     if(!calendar)throw new Error('ARROW calendar controls could not start. Refresh to retry.');
   }
   const [todos, calendarResult, items, captures] = await Promise.all([
-    arrowDataRequest<ArrowTodo[]>("/rest/v1/todos?select=id,title,due_on,completed,position,created_at,estimated_minutes,scheduled_on,scheduled_start&order=completed.asc,due_on.asc.nullslast,position.asc,created_at.asc&limit=500"),
+    arrowDataAll<ArrowTodo>("/rest/v1/todos?select=id,title,due_on,completed,position,created_at,estimated_minutes,scheduled_on,scheduled_start&order=completed.asc,due_on.asc.nullslast,position.asc,created_at.asc,id.asc&limit=500"),
     calendar ? calendar() : arrowDataRequest<ArrowCalendarEvent[]>("/rest/v1/relay_calendar_events?select=id,title,event_date,is_all_day,start_time,end_time,details&order=event_date.asc,start_time.asc&limit=500").then(events=>({events,warnings:[] as string[]})),
-    arrowDataRequest<ArrowWaypointItem[]>("/rest/v1/waypoint_items?status=eq.active&select=id,source_key,capture_id,title,item_type,placement,due_date,due_time,when_text,context,why,priority,duration_minutes,depends_on,status,created_at,updated_at&order=created_at.asc&limit=300"),
+    arrowDataAll<ArrowWaypointItem>("/rest/v1/waypoint_items?status=eq.active&select=id,source_key,capture_id,title,item_type,placement,due_date,due_time,when_text,context,why,priority,duration_minutes,depends_on,status,created_at,updated_at&order=created_at.asc,id.asc&limit=500"),
     arrowDataRequest<ArrowWaypointCapture[]>("/rest/v1/waypoint_captures?select=id,source_key,raw_input,summary,intent,next_move,signals,route,questions,source,model,applied,applied_at,created_at&order=created_at.desc&limit=24"),
   ]);
   return {
@@ -375,7 +406,7 @@ export async function createSharedTodo(
     : "/rest/v1/todos";
   return arrowDataRequest(path, {
     method: "POST",
-    prefer: sourceKey ? "resolution=merge-duplicates,return=representation" : "return=representation",
+    prefer: sourceKey ? "resolution=ignore-duplicates,return=representation" : "return=representation",
     body: {
       user_id: arrowUserId(),
       title: title.trim(),
@@ -390,7 +421,7 @@ export async function createSharedTodo(
 export async function setSharedTodoCompleted(id: string, completed: boolean) {
   return arrowDataRequest(`/rest/v1/todos?id=eq.${encodeURIComponent(id)}&user_id=eq.${encodeURIComponent(arrowUserId())}`, {
     method: "PATCH",
-    prefer: "return=minimal",
+    prefer: "return=representation",
     body: { completed },
   });
 }
@@ -407,7 +438,7 @@ export async function createSharedCalendarEvent(
     : "/rest/v1/relay_calendar_events";
   return arrowDataRequest(path, {
     method: "POST",
-    prefer: sourceKey ? "resolution=merge-duplicates,return=representation" : "return=representation",
+    prefer: sourceKey ? "resolution=ignore-duplicates,return=representation" : "return=representation",
     body: {
       user_id: arrowUserId(),
       title: title.trim(),
@@ -430,7 +461,7 @@ export async function createSharedArrowNote(
     : "/rest/v1/notes";
   return arrowDataRequest(path, {
     method: "POST",
-    prefer: sourceKey ? "resolution=merge-duplicates,return=representation" : "return=representation",
+    prefer: sourceKey ? "resolution=ignore-duplicates,return=representation" : "return=representation",
     body: {
       user_id: arrowUserId(),
       title: title.trim().slice(0, 120) || "Waypoint capture",
@@ -474,7 +505,7 @@ export async function saveSharedWaypointCapture(
 export async function markSharedWaypointCaptureApplied(id: string) {
   return arrowDataRequest(`/rest/v1/waypoint_captures?id=eq.${encodeURIComponent(id)}&user_id=eq.${encodeURIComponent(arrowUserId())}`, {
     method: "PATCH",
-    prefer: "return=minimal",
+    prefer: "return=representation",
     body: {
       applied: true,
       applied_at: new Date().toISOString(),
@@ -490,7 +521,7 @@ export async function upsertSharedWaypointItems(
   if (!items.length) return [] as ArrowWaypointItem[];
   return arrowDataRequest<ArrowWaypointItem[]>("/rest/v1/waypoint_items?on_conflict=user_id,source_key", {
     method: "POST",
-    prefer: "resolution=merge-duplicates,return=representation",
+    prefer: "resolution=ignore-duplicates,return=representation",
     body: items.map((item) => ({
       user_id: arrowUserId(),
       source_key: `waypoint:${item.id}`,
@@ -524,7 +555,7 @@ export async function archiveSharedWaypointItem(sourceKey: string) {
     `/rest/v1/waypoint_items?source_key=eq.${encodeURIComponent(sourceKey)}&user_id=eq.${encodeURIComponent(arrowUserId())}`,
     {
       method: "PATCH",
-      prefer: "return=minimal",
+      prefer: "return=representation",
       body: { status: "archived", updated_at: new Date().toISOString() },
     }
   );
@@ -552,10 +583,10 @@ export function openRavinFromWaypoint(prompt = "") {
 }
 
 export async function updateSharedTodo(id: string, changes: {title?: string; due_on?: string; completed?: boolean; estimated_minutes?: number | null; scheduled_on?: string | null; scheduled_start?: string | null}) {
-  return arrowDataRequest(`/rest/v1/todos?id=eq.${encodeURIComponent(id)}&user_id=eq.${encodeURIComponent(arrowUserId())}`, {method:'PATCH',prefer:'return=minimal',body:changes});
+  return arrowDataRequest(`/rest/v1/todos?id=eq.${encodeURIComponent(id)}&user_id=eq.${encodeURIComponent(arrowUserId())}`, {method:'PATCH',prefer:'return=representation',body:changes});
 }
 export async function deleteSharedEvent(id: string) {
-  return arrowDataRequest(`/rest/v1/relay_calendar_events?id=eq.${encodeURIComponent(id)}&user_id=eq.${encodeURIComponent(arrowUserId())}`, {method:'DELETE',prefer:'return=minimal'});
+  return arrowDataRequest(`/rest/v1/relay_calendar_events?id=eq.${encodeURIComponent(id)}&user_id=eq.${encodeURIComponent(arrowUserId())}`, {method:'DELETE',prefer:'return=representation'});
 }
 
 export type ScheduleBlock = {task_id:string; title:string; date:string; start:string; end:string; minutes:number; late:boolean};
@@ -566,7 +597,8 @@ export async function generateAutoPlan(start:string,end:string):Promise<AutoPlan
     if(!os?.previewPlan)throw new Error('The beta planning tools are still loading. Please retry.');
     return os.previewPlan(start,end);
   }
-  const response=await authorizedFetch('/ravin/api/waypoint/plan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({start,end,timezone:Intl.DateTimeFormat().resolvedOptions().timeZone})},45000);
+  const endpoint=['enterarrow.com','www.enterarrow.com'].includes(location.hostname)?'/ravin/api/waypoint/plan':'https://ravin-hyeq.onrender.com/api/waypoint/plan';
+  const response=await authorizedFetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({start,end,timezone:Intl.DateTimeFormat().resolvedOptions().timeZone})},45000);
   const data=await response.json();if(!response.ok)throw new Error(data.error||'Could not build your plan.');return data;
 }
 export async function applyScheduleBlock(block:ScheduleBlock) {
@@ -574,8 +606,9 @@ export async function applyScheduleBlock(block:ScheduleBlock) {
 }
 
 export async function updateSharedCalendarEvent(id:string,changes:Pick<ArrowCalendarEvent,'title'|'event_date'|'start_time'|'end_time'|'is_all_day'>) {
-  return arrowDataRequest(`/rest/v1/relay_calendar_events?id=eq.${encodeURIComponent(id)}&user_id=eq.${encodeURIComponent(arrowUserId())}`,{method:'PATCH',prefer:'return=minimal',body:changes});
+  return arrowDataRequest(`/rest/v1/relay_calendar_events?id=eq.${encodeURIComponent(id)}&user_id=eq.${encodeURIComponent(arrowUserId())}`,{method:'PATCH',prefer:'return=representation',body:changes});
 }
 export async function updateSharedPlan(sourceKey:string,changes:{title:string;due_date:string|null;due_time:string|null;status:'active'|'completed';duration_minutes:number|null}) {
-  return arrowDataRequest(`/rest/v1/waypoint_items?source_key=eq.${encodeURIComponent(sourceKey)}&user_id=eq.${encodeURIComponent(arrowUserId())}`,{method:'PATCH',prefer:'return=minimal',body:{...changes,updated_at:new Date().toISOString()}});
+  return arrowDataRequest(`/rest/v1/waypoint_items?source_key=eq.${encodeURIComponent(sourceKey)}&user_id=eq.${encodeURIComponent(arrowUserId())}`,{method:'PATCH',prefer:'return=representation',body:{...changes,updated_at:new Date().toISOString()}});
 }
+

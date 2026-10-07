@@ -1,7 +1,7 @@
 "use client";
 import {PlanningControls} from "./planning-controls";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { BeaconIcon } from "./beacon-icon";
 import {
   CalendarIcon,
@@ -107,7 +107,7 @@ function resolveCaptureDate(item: CapturedItem) {
   }
 
   const parsed = new Date(item.when || "");
-  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString().slice(0, 10);
+  return Number.isNaN(parsed.getTime()) ? null : `${parsed.getFullYear()}-${String(parsed.getMonth()+1).padStart(2,'0')}-${String(parsed.getDate()).padStart(2,'0')}`;
 }
 
 export function WaypointShell() {
@@ -128,23 +128,27 @@ export function WaypointShell() {
   const [interpretation, setInterpretation] = useState<WaypointInterpretation | null>(null);
 
   const [pendingTasks, setPendingTasks] = useState<Set<string>>(new Set());
+  const refreshVersion = useRef(0);
+  const pendingTaskIds = useRef(new Set<string>());
   async function refreshSharedPlanning() {
+    const version = ++refreshVersion.current;
     setSyncing(true);
     try {
       const shared = await loadSharedPlanningData();
+      if (version !== refreshVersion.current) return;
       const today = localIsoDate(0);
       const requestedItem=new URLSearchParams(location.search).get("item");
       const todayTodos = shared.todos.filter((task) =>
-        task.id===requestedItem || task.scheduled_on===today || !task.due_on || task.due_on === today || (!task.completed && task.due_on < today)
+        task.id===requestedItem || task.scheduled_on===today || ((!task.scheduled_on || task.scheduled_on < today) && (!task.due_on || task.due_on===today || (!task.completed && task.due_on<today)))
       );
 
       setSharedTodos(shared.todos);
       setSharedEvents(shared.events);
-      setTodayItems(todayTodos.map((task) => ({
+      setTodayItems(current => todayTodos.map((task) => ({
         id: task.id,
         title: task.title,
         meta: task.scheduled_on===localIsoDate(0)&&task.scheduled_start ? `Scheduled ${task.scheduled_start.slice(0,5)}` : task.due_on ? dueMeta(task.due_on) : "No due date",
-        completed: task.completed,
+        completed: pendingTaskIds.current.has(task.id) ? (current.find(item=>item.id===task.id)?.completed ?? task.completed) : task.completed,
       })));
       setEvents(shared.events.map((event) => ({
         id: event.id,
@@ -157,9 +161,9 @@ export function WaypointShell() {
       setCaptureHistory(shared.captures);
       setSyncError(shared.warnings.length?shared.warnings.join(" "):null);
     } catch (error) {
-      setSyncError(error instanceof Error ? error.message : "Waypoint could not sync ARROW planning data.");
+      if (version === refreshVersion.current) setSyncError(error instanceof Error ? error.message : "Waypoint could not sync ARROW planning data.");
     } finally {
-      setSyncing(false);
+      if (version === refreshVersion.current) setSyncing(false);
     }
   }
 
@@ -202,6 +206,7 @@ export function WaypointShell() {
     window.addEventListener("focus", refresh);
     return () => {
       cancelled = true;
+      refreshVersion.current++;
       window.clearInterval(poll);
       window.removeEventListener("storage", onStorage);
       window.removeEventListener("arrow:planning-changed", refresh);
@@ -213,7 +218,7 @@ export function WaypointShell() {
   const progress = todayItems.length ? Math.round((completed / todayItems.length) * 100) : 0;
 
   async function processDump() {
-    if (!dump.trim() || isInterpreting) return;
+    if (!dump.trim() || isInterpreting || isApplyingCapture) return;
     setIsInterpreting(true);
     setInterpretation(null);
     setActiveCaptureId(null);
@@ -274,6 +279,7 @@ export function WaypointShell() {
   }
 
   function toggleCapture(id: string) {
+    if (isApplyingCapture) return;
     setCaptures((current) =>
       current.map((item) => item.id === id ? { ...item, accepted: !item.accepted } : item)
     );
@@ -281,7 +287,9 @@ export function WaypointShell() {
 
   async function acceptCaptures() {
     const accepted = captures.filter((item) => item.accepted);
-    if (!accepted.length || isApplyingCapture) return;
+    if (!accepted.length || isApplyingCapture || isInterpreting) return;
+    const undated = accepted.find(item=>item.type==='event' && !resolveCaptureDate(item));
+    if (undated) { setSyncError(`Choose a date for “${undated.title}” before applying this capture.`); return; }
 
     const todayTasks = accepted
       .filter((item) => item.type === "task");
@@ -310,7 +318,7 @@ export function WaypointShell() {
     setSyncError(null);
     try {
       await Promise.all([
-        ...todayTasks.filter(item=>!sharedTodos.some(task=>!task.completed&&task.title.trim().toLowerCase()===item.title.trim().toLowerCase())).map((item) =>
+        ...todayTasks.map((item) =>
           createSharedTodo(
             item.title,
             resolveCaptureDate(item) || localIsoDate(0),
@@ -358,7 +366,9 @@ export function WaypointShell() {
   }
 
   async function toggleTodayItem(id: string, completed: boolean) {
-    if(pendingTasks.has(id))return;
+    if(pendingTaskIds.current.has(id))return;
+    pendingTaskIds.current.add(id);
+    refreshVersion.current++;
     setPendingTasks(current=>new Set(current).add(id));
     setTodayItems((current) =>
       current.map((item) => item.id === id ? { ...item, completed } : item)
@@ -372,7 +382,7 @@ export function WaypointShell() {
         current.map((item) => item.id === id ? { ...item, completed: !completed } : item)
       );
       setSyncError(error instanceof Error ? error.message : "Waypoint could not update that task.");
-    } finally {setPendingTasks(current=>{const next=new Set(current);next.delete(id);return next;});}
+    } finally {pendingTaskIds.current.delete(id); setSyncing(false); setPendingTasks(current=>{const next=new Set(current);next.delete(id);return next;});}
   }
 
   useEffect(()=>{if(syncing)return;const id=new URLSearchParams(location.search).get('item');if(!id)return;const handle=window.setTimeout(()=>document.getElementById('item-'+id)?.scrollIntoView({block:'center',behavior:document.documentElement.dataset.arrowMotion==='reduce'?'auto':'smooth'}),100);return()=>clearTimeout(handle);},[syncing,activeTab]);
@@ -692,6 +702,7 @@ function DumpView({
 
         <textarea
           value={dump}
+          disabled={isInterpreting || isApplying}
           onChange={(event) => setDump(event.target.value)}
           placeholder="I’ve got calc tomorrow, I want to finish the Waypoint prototype, I need to figure out when I can work on..."
           className="brain-textarea"
@@ -705,7 +716,7 @@ function DumpView({
           </span>
           <button type="button"
             className="primary-button"
-            disabled={!dump.trim() || isInterpreting}
+            disabled={!dump.trim() || isInterpreting || isApplying}
             onClick={processDump}
           >
             <SparkIcon width={17} height={17} />
@@ -1222,3 +1233,4 @@ function tabTitle(tab: WaypointTab) {
 
   return map[tab];
 }
+
