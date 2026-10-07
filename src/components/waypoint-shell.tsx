@@ -415,7 +415,7 @@ export function WaypointShell() {
 
         <nav className="nav">
           {tabs.map(({ id, label, icon: Icon }) => (
-            <button
+            <button type="button"
               key={id}
               className={`nav-item ${activeTab === id ? "active" : ""}`}
               onClick={() => setActiveTab(id)}
@@ -466,10 +466,10 @@ export function WaypointShell() {
 
           <div className="topbar-actions">
             <div data-arrow-os-shell data-module="waypoint" suppressHydrationWarning />
-            <button className="icon-button" aria-label="Quick add" onClick={() => setActiveTab("dump")}>
+            <button type="button" className="icon-button" aria-label="Quick add" onClick={() => setActiveTab("dump")}>
               <PlusIcon width={18} height={18} />
             </button>
-            <button className="ravin-chip" onClick={() => openRavinFromWaypoint()}>
+            <button type="button" className="ravin-chip" onClick={() => openRavinFromWaypoint()}>
               <SparkIcon width={16} height={16} />
               Ask RAVIN
             </button>
@@ -592,7 +592,7 @@ function TodayView({
 
         <div className="task-list">
           {items.map((item, index) => (
-            <button
+            <button type="button"
               id={`item-${item.id}`}
               className={`task-row ${item.completed ? "done" : ""}`}
               key={item.id}
@@ -611,7 +611,7 @@ function TodayView({
         </div>
       </section>
 
-      <button className="panel dump-card" onClick={onDump}>
+      <button type="button" className="panel dump-card" onClick={onDump}>
         <div className="dump-card-icon">
           <SparkIcon width={18} height={18} />
         </div>
@@ -703,7 +703,7 @@ function DumpView({
               ? `${dump.split(/\s+/).filter(Boolean).length} words · context-aware`
               : "Capture first. Organize later."}
           </span>
-          <button
+          <button type="button"
             className="primary-button"
             disabled={!dump.trim() || isInterpreting}
             onClick={processDump}
@@ -819,7 +819,7 @@ function DumpView({
 
               <div className="capture-list">
                 {captures.map((item) => (
-                  <button
+                  <button type="button"
                     key={item.id}
                     className={`capture-row ${item.accepted ? "selected" : ""}`}
                     onClick={() => toggleCapture(item.id)}
@@ -847,7 +847,7 @@ function DumpView({
 
               <div className="capture-footer">
                 <span>Nothing changes until you approve it.</span>
-                <button
+                <button type="button"
                   className="primary-button"
                   onClick={acceptCaptures}
                   disabled={!acceptedCount || isApplying}
@@ -928,7 +928,7 @@ function PlansView({
           </article>
         ) : null}
 
-        <button className="panel new-plan-card" onClick={onNewPlan}>
+        <button type="button" className="panel new-plan-card" onClick={onNewPlan}>
           <PlusIcon width={22} height={22} />
           <span>New plan</span>
         </button>
