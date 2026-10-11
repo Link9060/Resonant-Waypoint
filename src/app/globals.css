@@ -117,7 +117,8 @@ button { color: inherit; }
 .topbar {
   height: 96px; padding: 22px 34px 16px; display: flex; align-items: flex-end; justify-content: space-between;
   position: sticky; top: 0; z-index: 5;
-  background: linear-gradient(to bottom, rgba(5,6,7,.96), rgba(5,6,7,.8) 70%, transparent);
+  background: rgb(var(--ui-surface) / .96);
+  border-bottom: 1px solid var(--line);
   backdrop-filter: blur(20px);
 }
 .topbar h1 { margin: 4px 0 0; font-size: 25px; font-weight: 620; letter-spacing: -.035em; }
@@ -666,3 +667,18 @@ button { color: inherit; }
 .capture-editor input,.capture-editor select,.capture-editor textarea {background:var(--panel,#171a20);color:inherit;border:1px solid #687080;border-radius:7px;padding:8px;width:100%;}
 .capture-copy details {margin:10px 0;}
 .capture-copy summary {cursor:pointer;}
+
+/* Daily planning and recoverable Capture. */
+.daily-context { display:flex; flex-wrap:wrap; gap:8px; margin-top:16px; }
+.daily-context span { padding:7px 10px; border:1px solid var(--line); border-radius:8px; font-size:13px; }
+.task-row[disabled] { opacity:.65; cursor:wait; }
+.capture-history-row button { border:1px solid var(--line); border-radius:8px; padding:10px; background:var(--bg); color:var(--text); min-height:44px; }
+.capture-history-row { gap:12px; flex-wrap:wrap; }
+.capture-history-row > div { flex:1; min-width:200px; }
+.capture-recovery { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-bottom:14px; padding:12px; border:1px solid var(--line); border-radius:12px; }
+.capture-recovery button { min-height:44px; padding:8px 12px; background:var(--bg); color:var(--text); border:1px solid var(--line); border-radius:8px; }
+.capture-editor :is(input,select,textarea) { background:var(--bg); color:var(--text); min-height:44px; font-size:16px; }
+.week-range { margin:0 0 16px; font-size:16px; }
+.time-block time { display:block; margin-bottom:5px; font-weight:600; }
+.nav-item:focus-visible,.task-row:focus-visible,.capture-history-row button:focus-visible { outline:2px solid var(--arrow-accent-color); outline-offset:3px; }
+@media(max-width:680px) { .topbar { gap:8px; } .topbar-actions { align-items:center; flex-shrink:0; } .ravin-chip { font-size:0; width:44px; padding:0; justify-content:center; } .ravin-chip svg { width:18px; height:18px; } .capture-history-row > div { min-width:0; flex-basis:100%; } }

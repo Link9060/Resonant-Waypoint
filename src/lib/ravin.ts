@@ -30,6 +30,11 @@ export type WaypointContext = {
   library: CapturedItem[];
 };
 
+export function currentPlanningAccount(): string | null {
+  const user = readSession()?.user as {id?:string} | undefined;
+  return typeof user?.id === "string" ? user.id : null;
+}
+
 function readSession(): ArrowSession | null {
   try {
     const raw = localStorage.getItem(SESSION_KEY);
@@ -235,6 +240,8 @@ export type ArrowTodo = {
   estimated_minutes: number | null;
   scheduled_on: string | null;
   scheduled_start: string | null;
+  priority?: "low" | "medium" | "high";
+  depends_on?: string[];
 };
 
 export type ArrowCalendarEvent = {

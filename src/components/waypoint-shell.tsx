@@ -1,4 +1,5 @@
 "use client";
+import {buildDailyPlan, belongsToToday, prerequisiteReason, allowedPlacements} from "@/lib/daily-plan";
 import {PlanningControls} from "./planning-controls";
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -15,6 +16,7 @@ import {
 } from "./icons";
 import { interpretBrainDump } from "@/lib/brain-dump";
 import {
+  currentPlanningAccount,
   archiveSharedWaypointItem,
   applySharedCapture,
   activateSharedAction,
@@ -60,6 +62,8 @@ type SharedEvent = {
   title: string;
   date: string;
   time?: string;
+  endTime?: string;
+  allDay?: boolean;
 };
 
 function safeJsonList<T>(key: string): T[] {
@@ -113,7 +117,18 @@ function resolveCaptureDate(item: CapturedItem) {
 }
 
 export function WaypointShell() {
-  const [activeTab, setActiveTab] = useState<WaypointTab>("today");
+  const [activeTab, setTab] = useState<WaypointTab>("today");
+  const [now,setNow] = useState(new Date());
+  const [reviewingCapture,setReviewingCapture] = useState(false);
+  const [draftReady,setDraftReady] = useState(false);
+  const [draftNotice,setDraftNotice] = useState('');
+  const draftOwner = useRef<string | null>(null);
+  const draftKey = (owner:string) => `arrow_capture_draft_v2:${owner}`;
+  function setActiveTab(tab:WaypointTab) {
+    setTab(tab);
+    const url=new URL(window.location.href);url.searchParams.set('tab',tab);url.searchParams.delete('item');
+    if(url.toString()!==location.href)window.history.pushState(null,'',url);
+  }
   const [dump, setDump] = useState("");
   const [captures, setCaptures] = useState<CapturedItem[]>([]);
   const [todayItems, setTodayItems] = useState(initialToday);
@@ -143,7 +158,7 @@ export function WaypointShell() {
       const today = localIsoDate(0);
       const requestedItem=new URLSearchParams(location.search).get("item");
       const todayTodos = shared.todos.filter((task) =>
-        task.id===requestedItem || task.scheduled_on===today || ((!task.scheduled_on || task.scheduled_on < today) && (!task.due_on || task.due_on===today || (!task.completed && task.due_on<today)))
+        task.id===requestedItem || belongsToToday(task,today)
       );
 
       setSharedTodos(shared.todos);
@@ -152,7 +167,7 @@ export function WaypointShell() {
       setTodayItems(current => todayTodos.map((task) => ({
         id: task.id,
         title: task.title,
-        meta: task.scheduled_on===localIsoDate(0)&&task.scheduled_start ? `Scheduled ${task.scheduled_start.slice(0,5)}` : task.due_on ? dueMeta(task.due_on) : "No due date",
+        meta: [task.due_on ? dueMeta(task.due_on) : "No due date",task.scheduled_on ? `Scheduled ${task.scheduled_on}${task.scheduled_start ? " at "+task.scheduled_start.slice(0,5):""}` : "",prerequisiteReason(task,shared.todos,shared.items.map(waypointRowToCapturedItem))].filter(Boolean).join(" · "),
         completed: pendingTaskIds.current.has(task.id) ? (current.find(item=>item.id===task.id)?.completed ?? task.completed) : task.completed,
       })));
       setEvents(shared.events.map((event) => ({
@@ -161,6 +176,7 @@ export function WaypointShell() {
         title: event.title,
         date: event.event_date,
         time: event.start_time?.slice(0, 5) || "",
+        endTime:event.end_time?.slice(0,5) || "", allDay:event.is_all_day,
       })));
       setLibraryItems(shared.items.map(waypointRowToCapturedItem));
       setCaptureHistory(shared.captures);
@@ -177,9 +193,18 @@ export function WaypointShell() {
     const params = new URLSearchParams(window.location.search);
     const tab = params.get("tab");
     if (tab && tabs.some((item) => item.id === tab)) {
-      setActiveTab(tab as WaypointTab);
+      setTab(tab as WaypointTab);
     }
 
+    const pop=()=>{const tab=new URLSearchParams(location.search).get('tab');setTab(tabs.some(t=>t.id===tab)?tab as WaypointTab:'today');};
+    window.addEventListener('popstate',pop);
+    const owner=currentPlanningAccount();draftOwner.current=owner;
+    if(owner) { try {const cached=JSON.parse(localStorage.getItem(draftKey(owner)) || 'null');
+      if(cached?.version===2 && cached.owner===owner && typeof cached.dump==='string' && cached.dump.length<=16000 && Date.now()-cached.savedAt<7*86400000) {
+        setDump(cached.dump);setCaptures(Array.isArray(cached.captures)?cached.captures.slice(0,14):[]);setInterpretation(cached.interpretation || null);setActiveCaptureId(cached.captureId || null);setDraftNotice('Your unfinished Capture was restored on this device.');
+      }
+    }catch {setDraftNotice('Your saved draft could not be restored.');}}
+    setDraftReady(true);
     let cancelled = false;
     const bootstrap = async () => {
       const legacy = safeJsonList<CapturedItem>(LIBRARY_KEY)
@@ -217,6 +242,7 @@ export function WaypointShell() {
       cancelled = true;
       refreshVersion.current++;
       window.clearInterval(poll);
+      window.removeEventListener('popstate',pop);
       window.removeEventListener("storage", onStorage);
       window.removeEventListener("arrow:planning-changed", refresh);
       window.removeEventListener("focus", refresh);
@@ -225,15 +251,42 @@ export function WaypointShell() {
     };
   }, []);
 
+  useEffect(()=>{
+    const tick=()=>{setNow(new Date());if(currentPlanningAccount()!==draftOwner.current){setDump('');setCaptures([]);setInterpretation(null);setActiveCaptureId(null);setDraftReady(false);setSharedTodos([]);setLibraryItems([]);setTodayItems([]);setPlanningLoaded(false);}};
+    const interval=window.setInterval(tick,30000);window.addEventListener('storage',tick);window.addEventListener('focus',tick);
+    return()=>{clearInterval(interval);window.removeEventListener('storage',tick);window.removeEventListener('focus',tick);};
+  },[]);
+  useEffect(()=>{
+    const owner=draftOwner.current;
+    if(!draftReady || !owner || owner!==currentPlanningAccount() || reviewingCapture)return;
+    try {if(dump.trim() || captures.length || interpretation) {
+      localStorage.setItem(draftKey(owner),JSON.stringify({version:2,owner,dump,captures,interpretation,captureId:activeCaptureId,savedAt:Date.now()}));
+    } else localStorage.removeItem(draftKey(owner));}
+    catch {setDraftNotice('Draft recovery is unavailable on this device. Keep this page open until you approve your Capture.');}
+  },[draftReady,dump,captures,interpretation,activeCaptureId,reviewingCapture]);
+  const daily=useMemo(()=>buildDailyPlan(sharedTodos.map(task=>({...task,completed:todayItems.find(item=>item.id===task.id)?.completed ?? task.completed})),sharedEvents,libraryItems,now),[sharedTodos,sharedEvents,libraryItems,now,todayItems]);
+  function openHistory(capture:ArrowWaypointCapture) {
+    setReviewingCapture(true);setDump(capture.raw_input);setCaptures([]);setActiveCaptureId(null);
+    setInterpretation({...capture,items:[]});setActiveTab('dump');
+  }
+  function leaveHistory() {
+    const owner=draftOwner.current;
+    if(owner!==currentPlanningAccount())return;
+    try {const draft=owner ? JSON.parse(localStorage.getItem(draftKey(owner)) || 'null') : null;
+      setDump(draft?.dump || '');setCaptures(draft?.captures || []);setInterpretation(draft?.interpretation || null);setActiveCaptureId(draft?.captureId || null);
+    }catch {setDump('');setCaptures([]);setInterpretation(null);setActiveCaptureId(null);}
+    setReviewingCapture(false);
+  }
   const completed = todayItems.filter((item) => item.completed).length;
   const progress = todayItems.length ? Math.round((completed / todayItems.length) * 100) : 0;
 
   async function processDump() {
-    if (!dump.trim() || isInterpreting || isApplyingCapture) return;
+    if (!dump.trim() || isInterpreting || isApplyingCapture || reviewingCapture) return;
     setIsInterpreting(true);
     setInterpretation(null);
     setActiveCaptureId(null);
 
+    const requestOwner=currentPlanningAccount();
     const sourceKey = `capture:${crypto.randomUUID()}`;
 
     try {
@@ -248,6 +301,7 @@ export function WaypointShell() {
         events: sharedEvents.map(event=>({id:event.id,title:event.title,date:event.event_date,time:event.start_time?.slice(0,5),end_time:event.end_time,is_all_day:event.is_all_day})),
         library: [...libraryItems,...sharedNotes],
       });
+      if(requestOwner!==currentPlanningAccount())return;
       setCaptures(result.items);
       setInterpretation(result);
 
@@ -259,6 +313,7 @@ export function WaypointShell() {
         setSyncError(saveError instanceof Error ? saveError.message : "Waypoint could not save this Capture history.");
       }
     } catch (error) {
+      if(requestOwner!==currentPlanningAccount())return;
       const fallback = interpretBrainDump(dump).map(item=>({...item, accepted:false}));
       const fallbackInterpretation: WaypointInterpretation = {
         summary: `RAVIN is unavailable right now, so Waypoint used its local capture sorter instead. ${error instanceof Error ? error.message : ""}`.trim(),
@@ -302,12 +357,13 @@ export function WaypointShell() {
   }
 
   async function acceptCaptures() {
+    if(reviewingCapture)return;
     const accepted = captures.filter((item) => item.accepted);
     if (!accepted.length || isApplyingCapture || isInterpreting) return;
     const undated = accepted.find(item=>item.type==='event' && !resolveCaptureDate(item));
     if (undated) { setSyncError(`Choose a date for “${undated.title}” before applying this capture.`); return; }
 
-    const invalid = accepted.find(item => !item.title.trim() || item.title.length > 120 ||
+    const invalid = accepted.find(item => (item.placement && !allowedPlacements(item.type).includes(item.placement)) || !item.title.trim() || item.title.length > 120 ||
       (item.date && !resolveCaptureDate(item)) ||
       (item.time && !/^([01]\d|2[0-3]):[0-5]\d$/.test(item.time)) ||
       (item.duration_minutes != null && (!Number.isInteger(item.duration_minutes) || item.duration_minutes < (item.type==='task'?5:1) || item.duration_minutes > (item.type==='task'?720:1440))) ||
@@ -377,8 +433,8 @@ export function WaypointShell() {
   );
 
   const futureTodos = useMemo(
-    () => sharedTodos.filter((task) => !task.completed && task.due_on > localIsoDate(0)),
-    [sharedTodos]
+    () => sharedTodos.filter((task) => !task.completed && (task.due_on > localIsoDate(0) || (task.scheduled_on && task.scheduled_on > localIsoDate(0)))),
+    [sharedTodos,now]
   );
 
   async function activateAction(item:CapturedItem) {
@@ -420,7 +476,7 @@ export function WaypointShell() {
           {tabs.map(({ id, label, icon: Icon }) => (
             <button type="button"
               key={id}
-              className={`nav-item ${activeTab === id ? "active" : ""}`}
+              className={`nav-item ${activeTab === id ? "active" : ""}`} aria-current={activeTab===id?'page':undefined}
               onClick={() => setActiveTab(id)}
             >
               <Icon width={19} height={19} />
@@ -493,6 +549,10 @@ export function WaypointShell() {
           {planningLoaded && activeTab === "today" && (
             <TodayView
               items={todayItems}
+              daily={daily}
+              pending={pendingTasks}
+              onPlans={()=>setActiveTab('plans')}
+              onPlan={()=>{document.querySelector<HTMLButtonElement>('[data-plan-week]')?.click();}}
               onToggle={toggleTodayItem}
               progress={progress}
               onDump={() => setActiveTab("dump")}
@@ -502,7 +562,10 @@ export function WaypointShell() {
           {activeTab === "dump" && (
             <DumpView
               dump={dump}
-              setDump={setDump}
+              reviewing={reviewingCapture}
+              draftNotice={draftNotice}
+              leaveHistory={leaveHistory}
+              setDump={value=>{setDump(value);setCaptures([]);setInterpretation(null);setActiveCaptureId(null);setDraftNotice('Draft saved on this device.');}}
               captures={captures}
               processDump={processDump}
               toggleCapture={toggleCapture}
@@ -523,7 +586,9 @@ export function WaypointShell() {
               onActivate={activateAction}
               busy={isApplyingCapture}
               onNewPlan={() => {
-                setDump("I want to plan: ");
+                if(reviewingCapture)leaveHistory();
+                setDump(current=>current.trim() ? current+"\nI want to plan: " : "I want to plan: ");
+                setCaptures([]);setInterpretation(null);setActiveCaptureId(null);
                 setActiveTab("dump");
               }}
             />
@@ -539,6 +604,7 @@ export function WaypointShell() {
               libraryItems={libraryItems}
               events={events}
               captures={captureHistory}
+              onOpenCapture={openHistory}
             />
           )}
         </div>
@@ -551,12 +617,16 @@ function TodayView({
   items,
   onToggle,
   progress,
-  onDump
+  onDump, daily, pending, onPlans, onPlan
 }: {
   items: TodayItem[];
   onToggle: (id: string, completed: boolean) => void;
   progress: number;
   onDump: () => void;
+  daily: ReturnType<typeof buildDailyPlan>;
+  pending:Set<string>;
+  onPlans:()=>void;
+  onPlan:()=>void;
 }) {
   return (
     <div className="page-grid today-grid">
@@ -565,8 +635,11 @@ function TodayView({
           <div className="eyebrow">RIGHT NOW</div>
           <h2>One clear next move.</h2>
           <p>
-            Waypoint keeps the whole picture nearby without making you stare at all of it at once.
+            {daily.next ? daily.next.title : daily.activeEvent ? daily.activeEvent.title : "Your day, with room to adjust."}
           </p>
+          <p>{daily.reason}</p>
+          <div className="daily-context"><span>{daily.openCount} open across ARROW</span><span>{daily.available} min available before your next event or 10 PM</span>{daily.blockedCount>0 && <span>{daily.blockedCount} waiting on prerequisites</span>}</div>
+          <div className="planning-control-bar"><button type="button" onClick={onPlan}>Preview a new schedule</button><button type="button" onClick={onPlans}>See upcoming work</button></div>
         </div>
 
         <div className="progress-orbit">
@@ -598,11 +671,12 @@ function TodayView({
         </div>
 
         <div className="task-list">
-          {items.map((item, index) => (
+          {!items.length && <p>No tasks due today. Check Plans for upcoming work or Capture something new.</p>}
+          {[...items].sort((a,b)=>Number(a.completed)-Number(b.completed)).map((item, index) => (
             <button type="button"
               id={`item-${item.id}`}
               className={`task-row ${item.completed ? "done" : ""}`}
-              key={item.id}
+              key={item.id} disabled={pending.has(item.id)} aria-pressed={Boolean(item.completed)} aria-label={`${item.completed?'Reopen':'Complete'} ${item.title}`}
               onClick={() => void onToggle(item.id, !item.completed)}
             >
               <span className="task-index">
@@ -644,12 +718,10 @@ function TodayView({
           <BeaconIcon size={42} active />
           <div>
             <strong>
-              {items.find((item) => !item.completed)?.title ?? "You're clear."}
+              {daily.next?.title ?? (daily.activeEvent?.title || (daily.openCount ? "Review your remaining work" : "Your task list is clear"))}
             </strong>
             <p>
-              {items.find((item) => !item.completed)
-                ? "This is the next unresolved item in today's route."
-                : "Nothing else is demanding your attention."}
+              {daily.reason}
             </p>
           </div>
         </div>
@@ -669,7 +741,7 @@ function DumpView({
   acceptedCount,
   isInterpreting,
   isApplying,
-  interpretation
+  interpretation, reviewing, draftNotice, leaveHistory
 }: {
   dump: string;
   setDump: (value: string) => void;
@@ -682,9 +754,13 @@ function DumpView({
   isInterpreting: boolean;
   isApplying: boolean;
   interpretation: WaypointInterpretation | null;
+  reviewing:boolean;
+  draftNotice:string;
+  leaveHistory:()=>void;
 }) {
   return (
     <div className="dump-layout">
+      {(reviewing || draftNotice) && <div className="capture-recovery" role="status"><span>{reviewing ? 'Saved reasoning · viewing only. This will not add tasks again.' : draftNotice}</span>{reviewing && <button type="button" onClick={leaveHistory}>Return to unfinished Capture</button>}</div>}
       <section className="panel dump-input-panel">
         <div className="dump-prompt">
           <BeaconIcon size={50} active />
@@ -701,6 +777,7 @@ function DumpView({
 
         <textarea
           value={dump}
+          aria-label="Capture your thoughts" maxLength={16000} readOnly={reviewing}
           disabled={isInterpreting || isApplying}
           onChange={(event) => setDump(event.target.value)}
           placeholder="I’ve got calc tomorrow, I want to finish the Waypoint prototype, I need to figure out when I can work on..."
@@ -715,7 +792,7 @@ function DumpView({
           </span>
           <button type="button"
             className="primary-button"
-            disabled={!dump.trim() || isInterpreting || isApplying}
+            disabled={!dump.trim() || isInterpreting || isApplying || reviewing}
             onClick={processDump}
           >
             <SparkIcon width={17} height={17} />
@@ -837,8 +914,8 @@ function DumpView({
                       <details><summary>Edit proposal</summary>
                         <div className="capture-editor">
                           <label>Title<input value={item.title} maxLength={120} disabled={isApplying} onChange={e=>editCapture(item.id,{title:e.target.value})}/></label>
-                          <label>Type<select value={item.type} disabled={isApplying} onChange={e=>{const type=e.target.value as CapturedItem['type'];editCapture(item.id,{type,placement:type==='event'?'calendar':type==='note'?'notes':type==='goal'?'direction':'plans'});}}>{['task','event','note','goal','project','later'].map(type=><option key={type}>{type}</option>)}</select></label>
-                          <label>Placement<select value={item.placement || 'plans'} disabled={isApplying} onChange={e=>editCapture(item.id,{placement:e.target.value as CapturedItem['placement']})}>{['today','plans','calendar','direction','notes','later'].map(place=><option key={place}>{place}</option>)}</select></label>
+                          <label>Type<select value={item.type} disabled={isApplying} onChange={e=>{const type=e.target.value as CapturedItem['type'];editCapture(item.id,{type,placement:type==='event'?'calendar':type==='note'?'notes':type==='goal'?'direction':type==='later'?'later':'plans'});}}>{['task','event','note','goal','project','later'].map(type=><option key={type}>{type}</option>)}</select></label>
+                          <label>Placement<select value={item.placement || 'plans'} disabled={isApplying} onChange={e=>editCapture(item.id,{placement:e.target.value as CapturedItem['placement']})}>{allowedPlacements(item.type).map(place=><option key={place}>{place}</option>)}</select></label>
                           <label>Date<input type="date" value={item.date || ''} disabled={isApplying} onChange={e=>editCapture(item.id,{date:e.target.value || null,when:null})}/></label>
                           <label>Time<input type="time" value={item.time || ''} disabled={isApplying} onChange={e=>editCapture(item.id,{time:e.target.value || null})}/></label>
                           <label>Duration (minutes)<input type="number" min={item.type==='task'?5:1} max={item.type==='task'?720:1440} value={item.duration_minutes ?? ''} disabled={isApplying} onChange={e=>editCapture(item.id,{duration_minutes:e.target.value?Number(e.target.value):null})}/></label>
@@ -866,7 +943,7 @@ function DumpView({
             </section>
           )}
 
-          {!captures.length && (
+          {!captures.length && !reviewing && (
             <section className="panel reasoning-section no-changes-card">
               <div className="eyebrow">NO CHANGES NEEDED</div>
               <h3>This Capture was useful without turning it into more tasks.</h3>
@@ -961,7 +1038,7 @@ function PlansView({
                 <span className="type-dot type-task" />
                 <span className="capture-copy">
                   <strong>{task.title}</strong>
-                  <small>{dueMeta(task.due_on)}</small>
+                  <small>{dueMeta(task.due_on)}{task.scheduled_on ? ` · Scheduled ${task.scheduled_on} ${task.scheduled_start?.slice(0,5) || ''}` : ''}</small>
                 </span>
                 <span className="capture-check">→</span>
               </div>
@@ -1045,6 +1122,7 @@ function CalendarView({ events, onDelete }: { events: SharedEvent[]; onDelete:(i
       </section>
 
       <section className="panel week-panel">
+        <h3 className="week-range">{days[0].iso} – {days[6].iso}</h3>
         <div className="calendar-week-controls"><button type="button" onClick={()=>setWeek(week-1)}>Previous week</button><button type="button" onClick={()=>setWeek(0)}>This week</button><button type="button" onClick={()=>setWeek(week+1)}>Next week</button></div>
         {error&&<p role="alert">{error}</p>}
         <div className="week-row">
@@ -1056,7 +1134,7 @@ function CalendarView({ events, onDelete }: { events: SharedEvent[]; onDelete:(i
               <div className="day-name">{day.label}</div>
               {day.events.length ? day.events.map((event) => (
                 <div className="time-block visible" id={`item-${event.id}`} key={event.id}>
-                  {event.time ? `${event.time} · ` : ""}{event.title}{event.read_only?<a href={event.source_href}>{event.source||"Open source"} ↗</a>:<button type="button" disabled={busy===event.id} aria-label={`Remove ${event.title}`} onClick={async()=>{if(!confirm(`Remove ${event.title} from your calendar?`))return;setBusy(event.id);setError('');try{await onDelete(event.id);}catch(e){setError(e instanceof Error?e.message:'Could not remove event.');}finally{setBusy(null);}}}>×</button>}
+                  <time>{event.allDay ? 'All day' : event.time ? `${event.time}${event.endTime ? '–'+event.endTime : ' · end time not set'}` : 'Time not set'}</time>{event.title}{event.read_only?<a href={event.source_href}>{event.source||"Open source"} ↗</a>:<button type="button" disabled={busy===event.id} aria-label={`Remove ${event.title}`} onClick={async()=>{if(!confirm(`Remove ${event.title} from your calendar?`))return;setBusy(event.id);setError('');try{await onDelete(event.id);}catch(e){setError(e instanceof Error?e.message:'Could not remove event.');}finally{setBusy(null);}}}>×</button>}
                 </div>
               )) : (
                 <div className="time-block muted">Clear</div>
@@ -1123,13 +1201,14 @@ function ReviewView({
   allTodos,
   libraryItems,
   events,
-  captures
+  captures, onOpenCapture
 }: {
   items: TodayItem[];
   allTodos: ArrowTodo[];
   libraryItems: CapturedItem[];
   events: SharedEvent[];
   captures: ArrowWaypointCapture[];
+  onOpenCapture:(capture:ArrowWaypointCapture)=>void;
 }) {
   const completed = allTodos.filter((item) => item.completed).length;
   const projects = libraryItems.filter((item) => item.type === "project");
@@ -1198,6 +1277,7 @@ function ReviewView({
                   </small>
                 </div>
                 <span>{capture.source === "ravin" ? "RAVIN" : "LOCAL"}</span>
+                <button type="button" onClick={()=>onOpenCapture(capture)}>Open reasoning</button>
               </div>
             ))}
           </div>
