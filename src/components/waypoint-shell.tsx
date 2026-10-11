@@ -17,6 +17,7 @@ import { interpretBrainDump } from "@/lib/brain-dump";
 import {
   archiveSharedWaypointItem,
   applySharedCapture,
+  activateSharedAction,
   deleteSharedEvent,
   createSharedArrowNote,
   createSharedCalendarEvent,
@@ -380,6 +381,14 @@ export function WaypointShell() {
     [sharedTodos]
   );
 
+  async function activateAction(item:CapturedItem) {
+    if (isApplyingCapture) return;
+    setIsApplyingCapture(true);
+    try {await activateSharedAction(item.id.startsWith('waypoint:')?item.id:`waypoint:${item.id}`,localIsoDate(0));await refreshSharedPlanning();setActiveTab('today');}
+    catch(error){setSyncError(error instanceof Error?error.message:'That action could not move to Today.');}
+    finally {setIsApplyingCapture(false);}
+  }
+
   async function archiveWaypointItem(item: CapturedItem) {
     const sourceKey = item.id.startsWith("waypoint:") ? item.id : `waypoint:${item.id}`;
     try {
@@ -511,6 +520,8 @@ export function WaypointShell() {
               items={libraryItems}
               futureTodos={futureTodos}
               onArchive={archiveWaypointItem}
+              onActivate={activateAction}
+              busy={isApplyingCapture}
               onNewPlan={() => {
                 setDump("I want to plan: ");
                 setActiveTab("dump");
@@ -875,11 +886,15 @@ function PlansView({
   items,
   futureTodos,
   onArchive,
+  onActivate,
+  busy,
   onNewPlan
 }: {
   items: CapturedItem[];
   futureTodos: ArrowTodo[];
   onArchive: (item: CapturedItem) => void | Promise<void>;
+  onActivate: (item: CapturedItem) => void | Promise<void>;
+  busy: boolean;
   onNewPlan: () => void;
 }) {
   const projects = items.filter((item) => item.type === "project");
@@ -963,7 +978,7 @@ function PlansView({
                   </small>
                   {item.context ? <em>{item.context}</em> : null}
                 </span>
-                <span className="capture-check">→</span>
+                <button className="row-action" type="button" disabled={busy} onClick={()=>void onActivate(item)}>Move to Today</button>
               </div>
             ))}
           </div>

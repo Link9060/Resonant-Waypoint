@@ -620,3 +620,7 @@ export async function applySharedCapture(captureId: string, items: CapturedItem[
     method: "POST", body: {p_capture_id: captureId, p_items: items}, timeoutMs: 30_000,
   });
 }
+
+export async function activateSharedAction(sourceKey:string,date:string) {
+  return arrowDataRequest('/rest/v1/rpc/arrow_activate_action',{method:'POST',body:{p_source_key:sourceKey,p_date:date}});
+}
