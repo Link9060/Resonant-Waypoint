@@ -123,6 +123,7 @@ export function WaypointShell() {
   const [syncError, setSyncError] = useState<string | null>(null);
   const [sharedEvents,setSharedEvents]=useState<ArrowCalendarEvent[]>([]);
   const [syncing, setSyncing] = useState(true);
+  const [planningLoaded, setPlanningLoaded] = useState(false);
   const [isApplyingCapture, setIsApplyingCapture] = useState(false);
   const [isInterpreting, setIsInterpreting] = useState(false);
   const [interpretation, setInterpretation] = useState<WaypointInterpretation | null>(null);
@@ -159,6 +160,7 @@ export function WaypointShell() {
       })));
       setLibraryItems(shared.items.map(waypointRowToCapturedItem));
       setCaptureHistory(shared.captures);
+      setPlanningLoaded(true);
       setSyncError(shared.warnings.length?shared.warnings.join(" "):null);
     } catch (error) {
       if (version === refreshVersion.current) setSyncError(error instanceof Error ? error.message : "Waypoint could not sync ARROW planning data.");
@@ -487,7 +489,7 @@ export function WaypointShell() {
         </header>
 
         <div className="content">
-          <PlanningControls tasks={sharedTodos} events={sharedEvents} plans={libraryItems} onChanged={refreshSharedPlanning} />
+          {planningLoaded && <PlanningControls tasks={sharedTodos} events={sharedEvents} plans={libraryItems} onChanged={refreshSharedPlanning} />}
           {(syncError || syncing) && (
             <div className={`waypoint-sync-state ${syncError ? "error" : ""}`}>
               <span>{syncError || "Syncing Waypoint with your ARROW account…"}</span>
@@ -496,7 +498,8 @@ export function WaypointShell() {
               ) : null}
             </div>
           )}
-          {activeTab === "today" && (
+          {!planningLoaded && activeTab !== "dump" && <div role="status" className="waypoint-sync-state">{syncing ? "Loading your tasks and plans…" : "Your tasks and plans could not load. Retry to see your next move."}</div>}
+          {planningLoaded && activeTab === "today" && (
             <TodayView
               items={todayItems}
               onToggle={toggleTodayItem}
@@ -520,7 +523,7 @@ export function WaypointShell() {
             />
           )}
 
-          {activeTab === "plans" && (
+          {planningLoaded && activeTab === "plans" && (
             <PlansView
               items={libraryItems}
               futureTodos={futureTodos}
@@ -531,11 +534,11 @@ export function WaypointShell() {
               }}
             />
           )}
-          {activeTab === "calendar" && <CalendarView events={events} onDelete={async id=>{await deleteSharedEvent(id);await refreshSharedPlanning();}} />}
-          {activeTab === "direction" && (
+          {planningLoaded && activeTab === "calendar" && <CalendarView events={events} onDelete={async id=>{await deleteSharedEvent(id);await refreshSharedPlanning();}} />}
+          {planningLoaded && activeTab === "direction" && (
             <DirectionView items={libraryItems} onArchive={archiveWaypointItem} />
           )}
-          {activeTab === "review" && (
+          {planningLoaded && activeTab === "review" && (
             <ReviewView
               items={todayItems}
               allTodos={sharedTodos}
