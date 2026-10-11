@@ -660,3 +660,9 @@ button { color: inherit; }
 :root[data-arrow-theme="dark"] { --faint:rgba(255,255,255,.58); }
 :root[data-arrow-theme="light"] :is(.capture-history-row,.direction-hero,.review-story,.calendar-week-controls button) { color:var(--text); border-color:var(--line); }
 @media(max-width:680px) { .waypoint-app { min-height:100dvh; } .calendar-week-controls { flex-wrap:wrap; } .week-row { grid-template-columns:repeat(7,minmax(132px,1fr)); } .task-row { gap:12px; } }
+
+.capture-editor {display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;padding:14px 0;}
+.capture-editor label {display:flex;flex-direction:column;gap:6px;font-size:13px;}
+.capture-editor input,.capture-editor select,.capture-editor textarea {background:var(--panel,#171a20);color:inherit;border:1px solid #687080;border-radius:7px;padding:8px;width:100%;}
+.capture-copy details {margin:10px 0;}
+.capture-copy summary {cursor:pointer;}

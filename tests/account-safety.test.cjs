@@ -37,3 +37,14 @@ test('a zero-row task update cannot report completion success',async()=>{
   const f=fixture(async()=>({ok:true,status:200,text:async()=> '[]'}),{access_token:'fresh',expires_at:Date.now()/1000+3600,user:{id:'owner'}});
   await assert.rejects(f.api.setSharedTodoCompleted('missing',true),/no longer exists/);
 });
+
+test('approved Capture sends one atomic request and preserves null deadlines and duration',async()=>{
+ const writes=[];const f=fixture(async(url,options)=>{writes.push({url,body:JSON.parse(options.body)});return {ok:true,status:200,text:async()=>'{"applied":true}'};},{access_token:'fresh',expires_at:Date.now()/1000+3600,user:{id:'owner'}});
+ await f.api.applySharedCapture('capture-id',[{id:'future',title:'Future',type:'task',placement:'plans',date:null},{id:'event',title:'Shift',type:'event',date:'2026-10-12',time:'16:00',duration_minutes:120}]);
+ assert.equal(writes.length,1);assert.match(writes[0].url,/rpc\/arrow_apply_capture/);assert.equal(writes[0].body.p_items[0].date,null);assert.equal(writes[0].body.p_items[1].duration_minutes,120);
+});
+test('fallback does not auto-approve, invent a today date from negation, or repeat completed work',()=>{
+ const exports={};vm.runInNewContext(ts.transpileModule(fs.readFileSync('src/lib/brain-dump.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText,{exports});
+ const items=exports.interpretBrainDump('Already completed this task. Bike project someday, not today. Tomorrow I have a work shift.');
+ assert.equal(items.length,2);assert.equal(items[0].when,undefined);assert.equal(items[1].type,'event');assert.equal(items.every(item=>item.accepted===false),true);
+});

@@ -25,8 +25,8 @@ export type WaypointInterpretation = {
 };
 
 export type WaypointContext = {
-  tasks: TodayItem[];
-  events: Array<{ id: string; title: string; date: string; time?: string }>;
+  tasks: (TodayItem & {due_on?: string; estimated_minutes?: number | null; scheduled_on?: string | null; scheduled_start?: string | null})[];
+  events: Array<{ id: string; title: string; date: string; time?: string; end_time?: string | null; is_all_day?: boolean }>;
   library: CapturedItem[];
 };
 
@@ -180,7 +180,7 @@ export async function interpretWithRavin(
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
       context,
     }),
-  }, 45_000);
+  }, 90_000);
 
   const data = await response.json().catch(() => ({})) as {
     error?: string;
@@ -380,11 +380,12 @@ export async function loadSharedPlanningData() {
     while(!calendar&&Date.now()<deadline){await new Promise(resolve=>setTimeout(resolve,100));calendar=calendarLoader();}
     if(!calendar)throw new Error('ARROW calendar controls could not start. Refresh to retry.');
   }
-  const [todos, calendarResult, items, captures] = await Promise.all([
-    arrowDataAll<ArrowTodo>("/rest/v1/todos?select=id,title,due_on,completed,position,created_at,estimated_minutes,scheduled_on,scheduled_start&order=completed.asc,due_on.asc.nullslast,position.asc,created_at.asc,id.asc&limit=500"),
+  const [todos, calendarResult, items, captures, notes] = await Promise.all([
+    arrowDataAll<ArrowTodo>("/rest/v1/todos?select=id,title,due_on,completed,position,created_at,estimated_minutes,scheduled_on,scheduled_start,priority,depends_on&order=completed.asc,due_on.asc.nullslast,position.asc,created_at.asc,id.asc&limit=500"),
     calendar ? calendar() : arrowDataRequest<ArrowCalendarEvent[]>("/rest/v1/relay_calendar_events?select=id,title,event_date,is_all_day,start_time,end_time,details&order=event_date.asc,start_time.asc&limit=500").then(events=>({events,warnings:[] as string[]})),
     arrowDataAll<ArrowWaypointItem>("/rest/v1/waypoint_items?status=eq.active&select=id,source_key,capture_id,title,item_type,placement,due_date,due_time,when_text,context,why,priority,duration_minutes,depends_on,status,created_at,updated_at&order=created_at.asc,id.asc&limit=500"),
     arrowDataRequest<ArrowWaypointCapture[]>("/rest/v1/waypoint_captures?select=id,source_key,raw_input,summary,intent,next_move,signals,route,questions,source,model,applied,applied_at,created_at&order=created_at.desc&limit=24"),
+    arrowDataAll<{id:string;title:string;content:unknown}>("/rest/v1/notes?select=id,title,content&order=created_at.asc,id.asc"),
   ]);
   return {
     todos: todos || [],
@@ -392,6 +393,7 @@ export async function loadSharedPlanningData() {
     warnings: calendarResult.warnings || [],
     items: items || [],
     captures: captures || [],
+    notes: (notes || []).map(note=>({id:note.id,title:note.title,type:"note" as const,placement:"notes" as const})),
   };
 }
 
@@ -612,3 +614,9 @@ export async function updateSharedPlan(sourceKey:string,changes:{title:string;du
   return arrowDataRequest(`/rest/v1/waypoint_items?source_key=eq.${encodeURIComponent(sourceKey)}&user_id=eq.${encodeURIComponent(arrowUserId())}`,{method:'PATCH',prefer:'return=representation',body:{...changes,updated_at:new Date().toISOString()}});
 }
 
+
+export async function applySharedCapture(captureId: string, items: CapturedItem[]) {
+  return arrowDataRequest("/rest/v1/rpc/arrow_apply_capture", {
+    method: "POST", body: {p_capture_id: captureId, p_items: items}, timeoutMs: 30_000,
+  });
+}

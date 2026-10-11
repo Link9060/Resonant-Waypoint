@@ -16,6 +16,7 @@ import {
 import { interpretBrainDump } from "@/lib/brain-dump";
 import {
   archiveSharedWaypointItem,
+  applySharedCapture,
   deleteSharedEvent,
   createSharedArrowNote,
   createSharedCalendarEvent,
@@ -88,7 +89,7 @@ function localIsoDate(offsetDays = 0) {
 }
 
 function resolveCaptureDate(item: CapturedItem) {
-  if (item.date && /^\d{4}-\d{2}-\d{2}$/.test(item.date)) return item.date;
+  if (item.date) { const date = new Date(`${item.date}T00:00:00Z`); return Number.isFinite(date.getTime()) && date.toISOString().slice(0,10) === item.date ? item.date : null; }
   const when = String(item.when || "").trim().toLowerCase();
   if (!when) return null;
   if (when === "today" || when === "tonight") return localIsoDate(0);
@@ -128,6 +129,7 @@ export function WaypointShell() {
   const [isInterpreting, setIsInterpreting] = useState(false);
   const [interpretation, setInterpretation] = useState<WaypointInterpretation | null>(null);
 
+  const [sharedNotes,setSharedNotes]=useState<CapturedItem[]>([]);
   const [pendingTasks, setPendingTasks] = useState<Set<string>>(new Set());
   const refreshVersion = useRef(0);
   const pendingTaskIds = useRef(new Set<string>());
@@ -144,6 +146,7 @@ export function WaypointShell() {
       );
 
       setSharedTodos(shared.todos);
+      setSharedNotes(shared.notes);
       setSharedEvents(shared.events);
       setTodayItems(current => todayTodos.map((task) => ({
         id: task.id,
@@ -206,6 +209,9 @@ export function WaypointShell() {
     window.addEventListener("storage", onStorage);
     window.addEventListener("arrow:planning-changed", refresh);
     window.addEventListener("focus", refresh);
+    window.addEventListener("online", refresh);
+    const visible=()=>{if(!document.hidden)refresh();};
+    document.addEventListener("visibilitychange",visible);
     return () => {
       cancelled = true;
       refreshVersion.current++;
@@ -213,6 +219,8 @@ export function WaypointShell() {
       window.removeEventListener("storage", onStorage);
       window.removeEventListener("arrow:planning-changed", refresh);
       window.removeEventListener("focus", refresh);
+      window.removeEventListener("online",refresh);
+      document.removeEventListener("visibilitychange",visible);
     };
   }, []);
 
@@ -231,12 +239,13 @@ export function WaypointShell() {
       const result = await interpretWithRavin(dump, {
         tasks: sharedTodos.map((task) => ({
           id: task.id,
+          due_on: task.due_on, estimated_minutes: task.estimated_minutes, scheduled_on: task.scheduled_on, scheduled_start: task.scheduled_start,
           title: task.title,
           meta: task.scheduled_on===localIsoDate(0)&&task.scheduled_start ? `Scheduled ${task.scheduled_start.slice(0,5)}` : task.due_on ? dueMeta(task.due_on) : "No due date",
           completed: task.completed,
         })),
-        events,
-        library: libraryItems,
+        events: sharedEvents.map(event=>({id:event.id,title:event.title,date:event.event_date,time:event.start_time?.slice(0,5),end_time:event.end_time,is_all_day:event.is_all_day})),
+        library: [...libraryItems,...sharedNotes],
       });
       setCaptures(result.items);
       setInterpretation(result);
@@ -249,13 +258,13 @@ export function WaypointShell() {
         setSyncError(saveError instanceof Error ? saveError.message : "Waypoint could not save this Capture history.");
       }
     } catch (error) {
-      const fallback = interpretBrainDump(dump);
+      const fallback = interpretBrainDump(dump).map(item=>({...item, accepted:false}));
       const fallbackInterpretation: WaypointInterpretation = {
         summary: `RAVIN is unavailable right now, so Waypoint used its local capture sorter instead. ${error instanceof Error ? error.message : ""}`.trim(),
         intent: null,
-        next_move: fallback[0]?.title || null,
+        next_move: "Retry RAVIN, or edit and select the local draft items before applying.",
         signals: [],
-        route: fallback.slice(0, 4).map((item, index) => ({
+        route: [].map((item: CapturedItem, index) => ({
           order: index + 1,
           title: item.title,
           reason: "Local fallback ordering",
@@ -287,64 +296,37 @@ export function WaypointShell() {
     );
   }
 
+  function editCapture(id: string, patch: Partial<CapturedItem>) {
+    if (!isApplyingCapture) setCaptures(current=>current.map(item=>item.id===id ? {...item,...patch} : item));
+  }
+
   async function acceptCaptures() {
     const accepted = captures.filter((item) => item.accepted);
     if (!accepted.length || isApplyingCapture || isInterpreting) return;
     const undated = accepted.find(item=>item.type==='event' && !resolveCaptureDate(item));
     if (undated) { setSyncError(`Choose a date for “${undated.title}” before applying this capture.`); return; }
 
-    const todayTasks = accepted
-      .filter((item) => item.type === "task");
-
-    const capturedEvents = accepted.flatMap((item) => {
-      if (item.type !== "event") return [];
-      const date = resolveCaptureDate(item);
-      if (!date) return [];
-      return [{
-        sourceKey: `waypoint:${item.id}`,
-        title: item.title,
-        date,
-        time: item.time || "",
-      }];
-    });
-
-    const libraryAdds = accepted.filter((item) => {
-      if (item.type === "event") return false;
-      if (item.type === "task" && (!item.placement || item.placement === "today")) return false;
-      return true;
-    });
-
-    const notes = accepted.filter((item) => item.type === "note");
-
+    const invalid = accepted.find(item => !item.title.trim() || item.title.length > 120 ||
+      (item.date && !resolveCaptureDate(item)) ||
+      (item.time && !/^([01]\d|2[0-3]):[0-5]\d$/.test(item.time)) ||
+      (item.duration_minutes != null && (!Number.isInteger(item.duration_minutes) || item.duration_minutes < (item.type==='task'?5:1) || item.duration_minutes > (item.type==='task'?720:1440))) ||
+      (item.type==='event' && item.time && item.duration_minutes && Number(item.time.slice(0,2))*60+Number(item.time.slice(3))+item.duration_minutes>=1440));
+    if (invalid) {setSyncError(`Check the title, date, time, and duration for “${invalid.title}”. Events crossing midnight need separate dates.`);return;}
+    const todayTasks = accepted.filter(item=>item.type==='task' && (!item.placement || item.placement==='today'));
+    const capturedEvents = accepted.filter(item=>item.type==='event');
     setIsApplyingCapture(true);
     setSyncError(null);
     try {
-      await Promise.all([
-        ...todayTasks.map((item) =>
-          createSharedTodo(
-            item.title,
-            resolveCaptureDate(item) || localIsoDate(0),
-            `waypoint:${item.id}`,
-            item.duration_minutes || null,
-          )
-        ),
-        ...capturedEvents.map((event) =>
-          createSharedCalendarEvent(event.title, event.date, event.time || "", event.sourceKey)
-        ),
-        ...notes.map((item) =>
-          createSharedArrowNote(
-            item.title,
-            [item.context, item.why, item.when ? `Timing: ${item.when}` : ""]
-              .filter(Boolean)
-              .join("\n") || item.title,
-            `waypoint:${item.id}`,
-          )
-        ),
-        upsertSharedWaypointItems(libraryAdds, activeCaptureId),
-      ]);
-
-      if (activeCaptureId) await markSharedWaypointCaptureApplied(activeCaptureId);
-
+      let captureId=activeCaptureId;
+      if (!captureId) {
+        if (!interpretation) throw new Error("Interpret this Capture before applying.");
+        const saved=await saveSharedWaypointCapture(dump,interpretation,`capture:${crypto.randomUUID()}`);
+        captureId=saved?.id || null;
+        if (!captureId) throw new Error("Capture history could not be saved. Retry before applying.");
+        setActiveCaptureId(captureId);
+      }
+      const items=accepted.map(item=>({...item, date:resolveCaptureDate(item) || (item.type==='task' && (!item.placement || item.placement==='today') ? localIsoDate(0) : null)}));
+      await applySharedCapture(captureId,items);
       await refreshSharedPlanning();
       window.dispatchEvent(new CustomEvent("arrow:planning-changed"));
 
@@ -515,6 +497,7 @@ export function WaypointShell() {
               captures={captures}
               processDump={processDump}
               toggleCapture={toggleCapture}
+              editCapture={editCapture}
               acceptCaptures={acceptCaptures}
               acceptedCount={acceptedCount}
               isInterpreting={isInterpreting}
@@ -670,6 +653,7 @@ function DumpView({
   captures,
   processDump,
   toggleCapture,
+  editCapture,
   acceptCaptures,
   acceptedCount,
   isInterpreting,
@@ -681,6 +665,7 @@ function DumpView({
   captures: CapturedItem[];
   processDump: () => void | Promise<void>;
   toggleCapture: (id: string) => void;
+  editCapture: (id: string, patch: Partial<CapturedItem>) => void;
   acceptCaptures: () => void;
   acceptedCount: number;
   isInterpreting: boolean;
@@ -833,29 +818,27 @@ function DumpView({
 
               <div className="capture-list">
                 {captures.map((item) => (
-                  <button type="button"
-                    key={item.id}
-                    className={`capture-row ${item.accepted ? "selected" : ""}`}
-                    onClick={() => toggleCapture(item.id)}
-                  >
-                    <span className={`type-dot type-${item.type}`} />
-                    <span className="capture-copy">
+                  <article key={item.id} className={`capture-row ${item.accepted ? "selected" : ""}`}>
+                    <label><input type="checkbox" checked={Boolean(item.accepted)} disabled={isApplying} onChange={()=>toggleCapture(item.id)} aria-label={`Select ${item.title}`} /></label>
+                    <div className="capture-copy">
                       <strong>{item.title}</strong>
-                      <small>
-                        {item.type}
-                        {item.priority ? ` · ${item.priority}` : ""}
-                        {item.placement ? ` · → ${item.placement}` : ""}
-                        {item.when ? ` · ${item.when}` : ""}
-                        {item.duration_minutes ? ` · ~${item.duration_minutes} min` : ""}
-                      </small>
-                      {item.context ? <em>{item.context}</em> : null}
-                      {item.why ? <span className="capture-why">{item.why}</span> : null}
-                      {item.depends_on?.length ? (
-                        <span className="capture-deps">After: {item.depends_on.join(", ")}</span>
-                      ) : null}
-                    </span>
-                    <span className="capture-check">{item.accepted ? "✓" : ""}</span>
-                  </button>
+                      {item.why ? <p className="capture-why">{item.why}</p> : null}
+                      <details><summary>Edit proposal</summary>
+                        <div className="capture-editor">
+                          <label>Title<input value={item.title} maxLength={120} disabled={isApplying} onChange={e=>editCapture(item.id,{title:e.target.value})}/></label>
+                          <label>Type<select value={item.type} disabled={isApplying} onChange={e=>{const type=e.target.value as CapturedItem['type'];editCapture(item.id,{type,placement:type==='event'?'calendar':type==='note'?'notes':type==='goal'?'direction':'plans'});}}>{['task','event','note','goal','project','later'].map(type=><option key={type}>{type}</option>)}</select></label>
+                          <label>Placement<select value={item.placement || 'plans'} disabled={isApplying} onChange={e=>editCapture(item.id,{placement:e.target.value as CapturedItem['placement']})}>{['today','plans','calendar','direction','notes','later'].map(place=><option key={place}>{place}</option>)}</select></label>
+                          <label>Date<input type="date" value={item.date || ''} disabled={isApplying} onChange={e=>editCapture(item.id,{date:e.target.value || null,when:null})}/></label>
+                          <label>Time<input type="time" value={item.time || ''} disabled={isApplying} onChange={e=>editCapture(item.id,{time:e.target.value || null})}/></label>
+                          <label>Duration (minutes)<input type="number" min={item.type==='task'?5:1} max={item.type==='task'?720:1440} value={item.duration_minutes ?? ''} disabled={isApplying} onChange={e=>editCapture(item.id,{duration_minutes:e.target.value?Number(e.target.value):null})}/></label>
+                          <label>Priority<select value={item.priority || 'medium'} disabled={isApplying} onChange={e=>editCapture(item.id,{priority:e.target.value as CapturedItem['priority']})}>{['low','medium','high'].map(priority=><option key={priority}>{priority}</option>)}</select></label>
+                          <label>Prerequisites (one per line)<textarea value={(item.depends_on || []).join('\n')} disabled={isApplying} onChange={e=>editCapture(item.id,{depends_on:e.target.value.split('\n').map(x=>x.trim()).filter(Boolean)})}/></label>
+                          <label>Context<textarea value={item.context || ''} disabled={isApplying} onChange={e=>editCapture(item.id,{context:e.target.value || null})}/></label>
+                        </div>
+                      </details>
+                      <small>{item.type} · {item.placement || 'plans'} · {item.date || item.when || 'No deadline'}{item.time ? ` · ${item.time}` : ''}{item.duration_minutes ? ` · ${item.duration_minutes} min` : ''}</small>
+                    </div>
+                  </article>
                 ))}
               </div>
 
