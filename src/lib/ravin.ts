@@ -166,10 +166,21 @@ function localDateParts(now = new Date()) {
   };
 }
 
+const captureCooldowns = new Map<string, { until: number; quota: boolean }>();
+
+function captureRateLimitMessage(seconds: number, quota = false) {
+  return quota
+    ? "RAVIN's AI allowance is exhausted. Your Capture is safe; Waypoint can sort it locally until the provider allowance resets."
+    : `RAVIN is temporarily rate limited. Wait ${seconds} seconds before trying again. Your Capture is safe and can still be sorted locally.`;
+}
+
 export async function interpretWithRavin(
   input: string,
   context: WaypointContext
 ): Promise<WaypointInterpretation> {
+  const account = (readSession()?.user as {id?: string} | undefined)?.id || 'signed-out';
+  const cooldown = captureCooldowns.get(account);
+  if (cooldown && cooldown.until > Date.now()) throw new Error(captureRateLimitMessage(Math.ceil((cooldown.until - Date.now()) / 1000), cooldown.quota));
   const now = localDateParts();
 
   const response = await authorizedFetch(apiUrl(), {
@@ -189,6 +200,8 @@ export async function interpretWithRavin(
 
   const data = await response.json().catch(() => ({})) as {
     error?: string;
+    code?: string;
+    retry_after?: number | null;
     summary?: string;
     intent?: string | null;
     next_move?: string | null;
@@ -201,8 +214,20 @@ export async function interpretWithRavin(
   };
 
   if (!response.ok) {
+    if (response.status === 429) {
+      const quota = data.code === 'CLOUDFLARE_QUOTA_EXHAUSTED';
+      const raw = response.headers.get('Retry-After');
+      const numeric = raw === null ? NaN : Number(raw);
+      const dated = raw ? Math.ceil((Date.parse(raw) - Date.now()) / 1000) : NaN;
+      const supplied = Number.isFinite(data.retry_after) && data.retry_after !== null ? Number(data.retry_after)
+        : Number.isFinite(numeric) ? numeric : dated;
+      const seconds = Math.max(1, Number.isFinite(supplied) ? supplied : 30);
+      captureCooldowns.set(account, {until: Date.now() + seconds * 1000, quota});
+      throw new Error(captureRateLimitMessage(Math.ceil(seconds), quota));
+    }
     throw new Error(data.error || `RAVIN request failed (HTTP ${response.status}).`);
   }
+  captureCooldowns.delete(account);
 
   const items = Array.isArray(data.items) ? data.items : [];
   const route = Array.isArray(data.route) ? data.route : [];
