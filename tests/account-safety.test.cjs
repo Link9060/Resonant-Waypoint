@@ -48,3 +48,13 @@ test('fallback does not auto-approve, invent a today date from negation, or repe
  const items=exports.interpretBrainDump('Already completed this task. Bike project someday, not today. Tomorrow I have a work shift.');
  assert.equal(items.length,2);assert.equal(items[0].when,undefined);assert.equal(items[1].type,'event');assert.equal(items.every(item=>item.accepted===false),true);
 });
+test('Capture explains a platform 429 and honors Retry-After before another request',async()=>{
+ let calls=0;const f=fixture(async()=>{calls++;return {ok:false,status:429,headers:new Headers({'Retry-After':'60'}),json:async()=>{throw new Error('HTML edge response');}};},{access_token:'fresh',expires_at:Date.now()/1000+3600,user:{id:'owner'}});
+ const context={tasks:[],events:[],library:[]};await assert.rejects(f.api.interpretWithRavin('Study',context),/Wait 60 seconds.*Capture is safe/);await assert.rejects(f.api.interpretWithRavin('Study',context),/rate limited/);assert.equal(calls,1);
+});
+test('Capture distinguishes an exhausted AI allowance and isolates cooldowns by account',async()=>{
+ let calls=0;const f=fixture(async()=>{calls++;return {ok:false,status:429,headers:new Headers(),json:async()=>({code:'CLOUDFLARE_QUOTA_EXHAUSTED',retry_after:null})};},{access_token:'fresh',expires_at:Date.now()/1000+3600,user:{id:'owner'}});
+ await assert.rejects(f.api.interpretWithRavin('Study',{tasks:[],events:[],library:[]}),/allowance is exhausted/);
+ f.values.set(key,JSON.stringify({access_token:'other',expires_at:Date.now()/1000+3600,user:{id:'other'}}));
+ await assert.rejects(f.api.interpretWithRavin('Study',{tasks:[],events:[],library:[]}),/allowance is exhausted/);assert.equal(calls,2);
+});
