@@ -773,3 +773,180 @@ button { color: inherit; }
 :root[data-arrow-theme="dark"][data-arrow-experience="glass"] .waypoint-app :is(.panel,.hero-panel,.sidebar,.topbar) { background:rgb(24 29 39 / .78)!important; }
 :root:not([data-arrow-adapt="core"]) .waypoint-app :is(.panel,.hero-panel,.planning-editor) { border-radius:var(--arrow-identity-radius,var(--radius,16px)); }
 :root[data-arrow-motion="reduce"] .waypoint-app :is(.panel,.hero-panel,.task-row,.capture-row) { transition:none!important; transform:none!important; }
+
+
+/* ARROW Adapt III: structural Waypoint identities, shared planning data and routes. */
+:root[data-arrow-adapt]:not([data-arrow-adapt="core"]) .waypoint-app {
+  --waypoint-identity-accent:var(--arrow-adapt-primary,#789389);
+  --waypoint-identity-soft:var(--arrow-adapt-secondary,#c4d1c6);
+}
+:root[data-arrow-adapt]:not([data-arrow-adapt="core"]) .waypoint-app
+  :is(.sidebar,.topbar,.panel,.hero-panel,.planning-editor,.task-row,.capture-row,.horizon-row,.direction-hero,.review-story,.dump-card,.plan-card) {
+  border-color:color-mix(in srgb,var(--waypoint-identity-accent) 24%,var(--line));
+}
+/* BLOOM: a friendly floating planner with mini apps and soft grouped controls. */
+@media(min-width:951px) {
+  :root[data-arrow-adapt="bloom"] .waypoint-app { grid-template-columns:268px minmax(0,1fr); }
+  :root[data-arrow-adapt="bloom"] .waypoint-app .sidebar {
+    top:11px;left:10px;height:calc(100dvh - 22px);width:248px;
+    border:2px solid color-mix(in srgb,var(--waypoint-identity-soft) 48%,var(--line));
+    border-radius:30px;padding:20px 13px;
+    box-shadow:0 14px 38px color-mix(in srgb,var(--waypoint-identity-accent) 17%,transparent);
+    background:color-mix(in srgb,var(--panel-2) 80%,var(--waypoint-identity-soft));
+  }
+}
+:root[data-arrow-adapt="bloom"] .waypoint-app {
+  background:radial-gradient(ellipse at 84% 6%,color-mix(in srgb,var(--waypoint-identity-soft) 32%,transparent),transparent 43%),
+             radial-gradient(ellipse at 24% 97%,color-mix(in srgb,var(--waypoint-identity-accent) 11%,transparent),transparent 47%),var(--bg);
+}
+:root[data-arrow-adapt="bloom"] .waypoint-app .nav-item {
+  border-radius:18px; min-height:47px; margin:2px 0;
+}
+:root[data-arrow-adapt="bloom"] .waypoint-app .nav-item.active {
+  background:color-mix(in srgb,var(--waypoint-identity-accent) 18%,var(--panel-2));
+  border:1px solid color-mix(in srgb,var(--waypoint-identity-soft) 42%,var(--line));
+  box-shadow:0 5px 15px color-mix(in srgb,var(--waypoint-identity-accent) 13%,transparent);
+}
+:root[data-arrow-adapt="bloom"] .waypoint-app .brand-mark { border-radius:20px; background:var(--waypoint-identity-soft); }
+:root[data-arrow-adapt="bloom"] .waypoint-app .topbar {
+  margin:10px 13px 0;border-radius:24px;
+  border:1px solid color-mix(in srgb,var(--waypoint-identity-soft) 40%,var(--line));
+  background:color-mix(in srgb,var(--panel) 85%,var(--waypoint-identity-soft));
+}
+:root[data-arrow-adapt="bloom"] .waypoint-app
+  :is(.panel,.hero-panel,.planning-editor,.task-row,.capture-row,.dump-card,.plan-card,.direction-hero) {
+  border-radius:clamp(20px,var(--arrow-identity-radius,26px),32px)!important;
+  background:color-mix(in srgb,var(--panel) 91%,var(--waypoint-identity-soft));
+  box-shadow:0 9px 29px color-mix(in srgb,var(--waypoint-identity-accent) 9%,transparent);
+}
+:root[data-arrow-adapt="bloom"] .waypoint-app :is(.primary-button,.nav-plus,.new-plan-card) {
+  border-radius:999px;
+}
+/* HAVEN: journal-like planning environment with genuine page geometry. */
+:root[data-arrow-adapt="haven"] .waypoint-app {
+  background:repeating-linear-gradient(0deg,transparent 0 42px,color-mix(in srgb,var(--waypoint-identity-accent) 5%,transparent) 43px),
+             var(--bg);
+}
+:root[data-arrow-adapt="haven"] .waypoint-app .sidebar {
+  background:color-mix(in srgb,var(--panel) 92%,var(--waypoint-identity-soft));
+  border-right:3px solid color-mix(in srgb,var(--waypoint-identity-accent) 46%,var(--line));
+}
+:root[data-arrow-adapt="haven"] .waypoint-app .brand-name,
+:root[data-arrow-adapt="haven"] .waypoint-app .topbar h1 {
+  font-family:var(--arrow-font-display)!important;font-weight:500;letter-spacing:-.035em;
+}
+:root[data-arrow-adapt="haven"] .waypoint-app .nav-item {
+  border-radius:0; min-height:46px;border-left:3px solid transparent;
+}
+:root[data-arrow-adapt="haven"] .waypoint-app .nav-item.active {
+  border-left-color:var(--waypoint-identity-accent);
+  background:color-mix(in srgb,var(--waypoint-identity-soft) 17%,transparent);
+}
+:root[data-arrow-adapt="haven"] .waypoint-app .topbar { background:color-mix(in srgb,var(--panel) 92%,var(--waypoint-identity-soft)); }
+:root[data-arrow-adapt="haven"] .waypoint-app
+  :is(.panel,.hero-panel,.planning-editor,.task-row,.capture-row,.dump-card,.plan-card,.direction-hero) {
+  background:color-mix(in srgb,var(--panel) 95%,var(--waypoint-identity-soft));
+  border-radius:12px!important;
+  border-left:3px solid color-mix(in srgb,var(--waypoint-identity-accent) 42%,var(--line));
+  box-shadow:4px 6px 0 color-mix(in srgb,var(--waypoint-identity-accent) 8%,transparent);
+}
+:root[data-arrow-adapt="haven"] .waypoint-app .eyebrow { font-family:var(--arrow-font-display);font-size:12px;letter-spacing:.02em; }
+/* ATELIER: horizontal catalog navigation and large editorial reading canvas. */
+@media(min-width:1100px) {
+  :root[data-arrow-adapt="atelier"] .waypoint-app { display:block;overflow:visible; }
+  :root[data-arrow-adapt="atelier"] .waypoint-app .sidebar {
+    position:sticky;inset:0 0 auto!important;width:100%;height:80px;
+    display:flex;flex-direction:row;align-items:center;gap:20px;
+    padding:8px clamp(18px,3vw,44px);z-index:40;
+    overflow-x:auto;overflow-y:hidden;
+    border:0;border-bottom:1px solid var(--line-strong);
+    background:var(--bg);backdrop-filter:none;box-shadow:none;
+  }
+  :root[data-arrow-adapt="atelier"] .waypoint-app .brand-row {
+    flex:none; padding:0;min-width:max-content;gap:8px;
+  }
+  :root[data-arrow-adapt="atelier"] .waypoint-app .nav {
+    display:flex;flex-direction:row;align-items:center;gap:10px;min-width:max-content;
+    margin-left:auto;
+  }
+  :root[data-arrow-adapt="atelier"] .waypoint-app .nav-item {
+    width:auto;min-width:max-content;display:flex;align-items:center;gap:7px;
+    padding:11px 6px;grid-template-columns:none;
+  }
+  :root[data-arrow-adapt="atelier"] .waypoint-app .sidebar-bottom {
+    flex:none;display:flex;flex-direction:row;align-items:center;gap:8px;margin:0;
+  }
+  :root[data-arrow-adapt="atelier"] .waypoint-app .sidebar-caption { display:none; }
+}
+:root[data-arrow-adapt="atelier"] .waypoint-app {
+  background:var(--bg);
+}
+:root[data-arrow-adapt="atelier"] .waypoint-app .brand-name { font-family:var(--arrow-font-display)!important;font-weight:400;font-size:23px; }
+:root[data-arrow-adapt="atelier"] .waypoint-app .nav-item {
+  border-radius:0!important;letter-spacing:.13em;text-transform:uppercase;font-size:10px;font-weight:750;
+  border-bottom:2px solid transparent;
+}
+:root[data-arrow-adapt="atelier"] .waypoint-app .nav-item.active {
+  background:transparent!important;border-color:var(--waypoint-identity-accent);
+}
+:root[data-arrow-adapt="atelier"] .waypoint-app .topbar {
+  background:transparent; border:0;border-bottom:1px solid var(--line-strong);
+  padding-block:24px; height:auto;min-height:108px;
+}
+:root[data-arrow-adapt="atelier"] .waypoint-app .topbar h1 {
+  font-family:var(--arrow-font-display)!important;font-size:clamp(30px,4vw,53px);
+  font-weight:400;letter-spacing:-.055em;
+}
+:root[data-arrow-adapt="atelier"] .waypoint-app
+  :is(.panel,.hero-panel,.planning-editor,.task-row,.capture-row,.dump-card,.plan-card,.direction-hero) {
+  border-radius:2px!important;background:transparent;box-shadow:none!important;
+  border-color:var(--line);
+}
+:root[data-arrow-adapt="atelier"] .waypoint-app :is(.eyebrow,.sidebar-caption) {
+  letter-spacing:.22em;font-weight:650;text-transform:uppercase;
+}
+/* PULSE: high-energy command board with emphasis and dominant navigation. */
+:root[data-arrow-adapt="pulse"] .waypoint-app {
+  background:radial-gradient(ellipse at 86% 3%,color-mix(in srgb,var(--waypoint-identity-accent) 23%,transparent),transparent 48%),
+             radial-gradient(ellipse at 12% 90%,color-mix(in srgb,var(--waypoint-identity-soft) 13%,transparent),transparent 44%),var(--bg);
+}
+:root[data-arrow-adapt="pulse"] .waypoint-app .sidebar {
+  border-right:2px solid var(--waypoint-identity-accent);
+  background:linear-gradient(170deg,color-mix(in srgb,var(--waypoint-identity-accent) 16%,var(--bg)),var(--bg));
+  box-shadow:8px 0 35px color-mix(in srgb,var(--waypoint-identity-accent) 15%,transparent);
+}
+:root[data-arrow-adapt="pulse"] .waypoint-app .brand-name {
+  font-family:var(--arrow-font-display)!important;text-transform:uppercase;
+  font-weight:850;letter-spacing:-.045em;font-size:22px;
+}
+:root[data-arrow-adapt="pulse"] .waypoint-app .nav-item {
+  border-radius:4px 18px 4px 18px!important;
+  font-size:13px;font-weight:750;letter-spacing:.025em;
+}
+:root[data-arrow-adapt="pulse"] .waypoint-app .nav-item.active {
+  background:color-mix(in srgb,var(--waypoint-identity-accent) 24%,var(--panel-2));
+  border:1px solid var(--waypoint-identity-soft);
+  box-shadow:inset 3px 0 var(--waypoint-identity-accent),0 6px 22px color-mix(in srgb,var(--waypoint-identity-accent) 16%,transparent);
+}
+:root[data-arrow-adapt="pulse"] .waypoint-app .topbar {
+  border-bottom:2px solid var(--waypoint-identity-soft);
+  background:linear-gradient(110deg,color-mix(in srgb,var(--waypoint-identity-accent) 16%,var(--panel)),var(--panel));
+}
+:root[data-arrow-adapt="pulse"] .waypoint-app .topbar h1 {
+  font-family:var(--arrow-font-display)!important;
+  text-transform:uppercase;font-size:clamp(22px,3vw,35px);font-weight:850;
+}
+:root[data-arrow-adapt="pulse"] .waypoint-app
+  :is(.panel,.hero-panel,.planning-editor,.task-row,.capture-row,.dump-card,.plan-card,.direction-hero) {
+  border-color:color-mix(in srgb,var(--waypoint-identity-soft) 52%,var(--line));
+  border-radius:5px 23px 5px 23px!important;
+  background:linear-gradient(145deg,color-mix(in srgb,var(--waypoint-identity-accent) 10%,var(--panel)),var(--panel));
+  box-shadow:0 8px 25px color-mix(in srgb,var(--waypoint-identity-accent) 12%,transparent);
+}
+@media(min-width:951px) and (hover:hover) {
+  :root[data-arrow-adapt="bloom"] .waypoint-app .nav-item:hover { transform:translateX(3px); }
+  :root[data-arrow-adapt="pulse"] .waypoint-app .nav-item:hover { transform:translateX(4px); }
+}
+@media(prefers-reduced-motion:reduce) {
+  :root:not([data-arrow-motion="full"])[data-arrow-adapt] .waypoint-app :is(.nav-item,.panel,.hero-panel) { animation:none!important;transition:none!important;transform:none!important; }
+}
