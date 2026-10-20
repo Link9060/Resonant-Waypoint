@@ -321,3 +321,19 @@ button { color: inherit; }
   .dump-prompt .beacon-icon { margin-bottom:18px; }
   .direction-hero { min-height:460px; padding:28px; }
 }
+
+/* ARROW Adapt identity systems (Core deliberately preserves the existing layout). */
+html[data-arrow-identity="bloom"] { --radius:28px; --accent:#91cba4; }
+html[data-arrow-identity="bloom"] body { font-family:ui-rounded,Inter,system-ui,sans-serif; }
+html[data-arrow-identity="bloom"] :is(.hero-panel,.content-panel,.card,.panel,.sidebar,.inspector) { border-radius:30px; }
+html[data-arrow-identity="haven"] { --radius:22px; --accent:#d4b89a; }
+html[data-arrow-identity="haven"] body { letter-spacing:.005em; line-height:1.7; }
+html[data-arrow-identity="haven"] :is(.hero-panel,.content-panel,.card,.panel,.sidebar,.inspector) { border-radius:20px; }
+html[data-arrow-identity="atelier"] { --radius:2px; --accent:#929292; }
+html[data-arrow-identity="atelier"] :is(.hero-panel,.content-panel,.card,.panel,.sidebar,.inspector,button) { border-radius:2px; }
+html[data-arrow-identity="atelier"] h1,html[data-arrow-identity="atelier"] h2 { letter-spacing:-.05em; font-weight:600; }
+html[data-arrow-identity="pulse"] { --radius:10px; --accent:#55b8ff; }
+html[data-arrow-identity="pulse"] :is(.hero-panel,.content-panel,.card,.panel,.sidebar,.inspector) { border-radius:10px; border-color:rgba(85,184,255,.3); }
+html[data-arrow-identity="pulse"] button:focus-visible { outline:2px solid #55b8ff; }
+html[data-arrow-accent="custom"] { --accent:var(--arrow-custom-accent,#6785ff); }
+@media(prefers-reduced-motion:reduce){html[data-arrow-identity] *{scroll-behavior:auto;}}
