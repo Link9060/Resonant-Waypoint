@@ -12,8 +12,8 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        <link rel="stylesheet" href="https://link9060.github.io/Resonant-Orbit/arrow-shell.css?v=20260927-arrow-shell-layout-v1" />
-        <script defer src="https://link9060.github.io/Resonant-Orbit/arrow-shell.js?v=20260927-arrow-shell-layout-v1" />
+        <link rel="stylesheet" href="https://link9060.github.io/Resonant-Orbit/arrow-shell.css?v=adapt-20261020-v3" />
+        <script defer src="https://link9060.github.io/Resonant-Orbit/arrow-shell.js?v=adapt-20261020-v3" />
       </head>
       <body>{children}</body>
     </html>
