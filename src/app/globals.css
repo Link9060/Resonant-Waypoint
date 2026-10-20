@@ -354,3 +354,33 @@ html[data-arrow-identity="pulse"] .review-grid { grid-template-columns:repeat(4,
 html[data-arrow-identity="haven"] .hero-panel { max-width:880px; }
 html[data-arrow-identity="atelier"] :is(.panel,.hero-panel) { border-radius:0; }
 html[data-arrow-identity="pulse"] :is(.panel,.hero-panel) { box-shadow:inset 0 1px 0 rgba(85,184,255,.24); }
+
+/* Light-mode token pass: Waypoint was still drawing a hard-coded dark canvas. */
+html[data-arrow-theme="light"] {
+  color-scheme:light; --bg:#f5f6f8; --panel:#fff; --panel-2:#f0f2f5;
+  --line:rgba(25,35,45,.14); --line-strong:rgba(25,35,45,.28);
+  --text:#1c2630; --muted:#536070; --faint:#717b87; --accent:#263b51;
+}
+html[data-arrow-theme="light"] .waypoint-app { background:#f5f6f8; }
+html[data-arrow-theme="light"] .sidebar { background:#fff; }
+html[data-arrow-theme="light"] .topbar { background:linear-gradient(to bottom,#fff 78%,rgba(255,255,255,.94)); }
+html[data-arrow-theme="light"] .ambient-grid { opacity:.07; }
+html[data-arrow-theme="light"] :is(.panel,.hero-panel) { background:#fff; box-shadow:0 12px 30px rgba(18,31,45,.055); }
+html[data-arrow-theme="light"] :is(.icon-button,.ravin-chip,.primary-button,.brand-mark) { background:#f2f4f7; }
+html[data-arrow-theme="light"] .nav-item.active { color:#152537; background:#e8edf2; box-shadow:inset 0 0 0 1px #cdd6df; }
+html[data-arrow-theme="light"] .nav-item:hover { color:#152537; background:#edf1f5; }
+html[data-arrow-theme="light"] .orbit-button:hover { color:#152537; }
+html[data-arrow-theme="light"] .nav-badge { color:#fff; background:#253648; }
+html[data-arrow-theme="light"] :is(input,textarea,select,.brain-textarea) { color:#1c2630; background:#fff; border-color:#cdd5df; }
+html[data-arrow-theme="light"] .progress-ring { stroke:#253648; }
+html[data-arrow-theme="light"] .progress-track { stroke:#d6dce4; }
+html[data-arrow-theme="light"] .task-check { border-color:#929eac; }
+html[data-arrow-theme="light"] .task-row { border-color:#e1e5e9; }
+/* Atelier is paper/ink, never glass. */
+html[data-arrow-identity="atelier"] :is(.sidebar,.topbar,.panel,.hero-panel,.dump-input-panel,.capture-panel,.plan-card,.now-card,.review-story,.direction-hero) {
+  background:#232323; border-color:#6e6e6e; backdrop-filter:none; -webkit-backdrop-filter:none;
+}
+html[data-arrow-theme="light"][data-arrow-identity="atelier"] :is(.sidebar,.topbar,.panel,.hero-panel,.dump-input-panel,.capture-panel,.plan-card,.now-card,.review-story,.direction-hero) {
+  background:#fffefa; border-color:#beb8ac; color:#202020;
+}
+html[data-arrow-theme="light"][data-arrow-identity="atelier"] .waypoint-app { background:#f5f2e9; }
