@@ -384,3 +384,13 @@ html[data-arrow-theme="light"][data-arrow-identity="atelier"] :is(.sidebar,.topb
   background:#fffefa; border-color:#beb8ac; color:#202020;
 }
 html[data-arrow-theme="light"][data-arrow-identity="atelier"] .waypoint-app { background:#f5f2e9; }
+
+/* Remaining light-mode details: selected text, placeholders, and timeline bars. */
+html[data-arrow-theme="light"] .brain-textarea::placeholder { color:#79838f; }
+html[data-arrow-theme="light"] .brain-textarea:focus { border-color:#8296aa; box-shadow:0 0 0 4px rgba(39,66,90,.08); }
+html[data-arrow-theme="light"] :is(.capture-row.selected,.today-column .day-name,.new-plan-card:hover) { color:var(--text); }
+html[data-arrow-theme="light"] .capture-row.selected { background:#e8edf2; }
+html[data-arrow-theme="light"] :is(.time-block,.time-block.muted) { background:#e8ebef; color:var(--text); }
+html[data-arrow-theme="light"] :is(.day-column,.horizon-row,.review-line) { border-color:#dce1e6; }
+html[data-arrow-theme="light"] .mini-progress { background:#d8dfe7; }
+html[data-arrow-theme="light"] .primary-button { background:#263648; color:#fff; border-color:#263648; }
