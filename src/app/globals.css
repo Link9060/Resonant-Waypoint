@@ -737,3 +737,39 @@ button { color: inherit; }
 :root[data-arrow-theme="dark"][data-arrow-experience="glass"] .waypoint-app .sidebar {
   background:rgb(18 22 30 / .82); backdrop-filter:blur(24px);
 }
+
+
+/* Waypoint material modes: no color/font/radius overrides of Adapt identities. */
+:root[data-arrow-experience="balanced"] .waypoint-app :is(.panel,.hero-panel,.planning-editor,.sidebar,.topbar) {
+  backdrop-filter:none; box-shadow:0 5px 18px #0000000b;
+}
+:root[data-arrow-experience="quiet"] .waypoint-app { background:var(--bg)!important; }
+:root[data-arrow-experience="quiet"] .waypoint-app :is(.panel,.hero-panel,.planning-editor,.sidebar,.topbar,.task-row,.capture-row,.horizon-row) {
+  background:var(--panel)!important; border-color:var(--line)!important;
+  box-shadow:none!important; backdrop-filter:none!important;
+  animation:none!important; transition:none!important;
+}
+:root[data-arrow-experience="quiet"] .waypoint-app :is(.ambient-glow,.ambient-grid) { display:none!important; }
+:root[data-arrow-experience="dynamic"] .waypoint-app {
+  background:radial-gradient(circle at 86% 9%,rgb(var(--arrow-accent-rgb,130,160,200) / .17),transparent 46%),var(--bg)!important;
+}
+:root[data-arrow-experience="dynamic"] .waypoint-app :is(.panel,.hero-panel,.planning-editor,.task-row,.capture-row,.horizon-row) {
+  border-color:rgb(var(--arrow-accent-rgb,130,160,200) / .28)!important;
+  box-shadow:0 10px 30px rgb(var(--arrow-accent-rgb,130,160,200) / .10);
+  transition:transform 230ms ease,box-shadow 230ms ease,border-color 230ms ease;
+}
+@media(hover:hover) { :root[data-arrow-experience="dynamic"] .waypoint-app :is(.task-row,.horizon-row,.capture-row):hover { transform:translateY(-2px); } }
+:root[data-arrow-experience="glass"] .waypoint-app {
+  background:radial-gradient(circle at 14% 4%,rgb(var(--arrow-accent-rgb,130,160,200) / .18),transparent 48%),var(--bg)!important;
+}
+:root[data-arrow-experience="glass"] .waypoint-app :is(.panel,.hero-panel,.planning-editor,.sidebar,.topbar,.direction-hero,.review-story) {
+  background:color-mix(in srgb,var(--panel-strong,var(--panel)) 74%,transparent)!important;
+  backdrop-filter:blur(26px) saturate(1.32)!important;
+  -webkit-backdrop-filter:blur(26px) saturate(1.32)!important;
+  border-color:color-mix(in srgb,var(--text) 20%,transparent)!important;
+  box-shadow:0 16px 40px #0002,inset 0 1px #ffffff16!important;
+}
+:root[data-arrow-theme="light"][data-arrow-experience="glass"] .waypoint-app :is(.panel,.hero-panel,.sidebar,.topbar) { background:rgb(255 255 255 / .78)!important; }
+:root[data-arrow-theme="dark"][data-arrow-experience="glass"] .waypoint-app :is(.panel,.hero-panel,.sidebar,.topbar) { background:rgb(24 29 39 / .78)!important; }
+:root:not([data-arrow-adapt="core"]) .waypoint-app :is(.panel,.hero-panel,.planning-editor) { border-radius:var(--arrow-identity-radius,var(--radius,16px)); }
+:root[data-arrow-motion="reduce"] .waypoint-app :is(.panel,.hero-panel,.task-row,.capture-row) { transition:none!important; transform:none!important; }
