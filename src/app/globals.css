@@ -337,3 +337,20 @@ html[data-arrow-identity="pulse"] :is(.hero-panel,.content-panel,.card,.panel,.s
 html[data-arrow-identity="pulse"] button:focus-visible { outline:2px solid #55b8ff; }
 html[data-arrow-accent="custom"] { --accent:var(--arrow-custom-accent,#6785ff); }
 @media(prefers-reduced-motion:reduce){html[data-arrow-identity] *{scroll-behavior:auto;}}
+
+/* Adapt spatial systems for Waypoint; Core remains untouched. */
+@media(min-width:900px){
+html[data-arrow-identity="bloom"] .content { max-width:1460px; padding-inline:55px; }
+html[data-arrow-identity="bloom"] .plan-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:25px; }
+html[data-arrow-identity="haven"] .content { max-width:960px; padding-inline:45px; }
+html[data-arrow-identity="haven"] .plan-grid { grid-template-columns:minmax(0,1fr); max-width:760px; gap:20px; }
+html[data-arrow-identity="atelier"] .content { max-width:1600px; padding-inline:55px; }
+html[data-arrow-identity="atelier"] .plan-grid { grid-template-columns:repeat(4,minmax(0,1fr)); gap:1px; }
+html[data-arrow-identity="atelier"] .review-grid { grid-template-columns:repeat(4,minmax(0,1fr)); gap:1px; }
+html[data-arrow-identity="pulse"] .content { max-width:none; }
+html[data-arrow-identity="pulse"] .plan-grid { grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; }
+html[data-arrow-identity="pulse"] .review-grid { grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; }
+}
+html[data-arrow-identity="haven"] .hero-panel { max-width:880px; }
+html[data-arrow-identity="atelier"] :is(.panel,.hero-panel) { border-radius:0; }
+html[data-arrow-identity="pulse"] :is(.panel,.hero-panel) { box-shadow:inset 0 1px 0 rgba(85,184,255,.24); }
