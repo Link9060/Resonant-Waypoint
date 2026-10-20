@@ -682,3 +682,58 @@ button { color: inherit; }
 .time-block time { display:block; margin-bottom:5px; font-weight:600; }
 .nav-item:focus-visible,.task-row:focus-visible,.capture-history-row button:focus-visible { outline:2px solid var(--arrow-accent-color); outline-offset:3px; }
 @media(max-width:680px) { .topbar { gap:8px; } .topbar-actions { align-items:center; flex-shrink:0; } .ravin-chip { font-size:0; width:44px; padding:0; justify-content:center; } .ravin-chip svg { width:18px; height:18px; } .capture-history-row > div { min-width:0; flex-basis:100%; } }
+
+
+/* ARROW Adapt cross-module parity: original Waypoint layout and data remain unchanged. */
+:root[data-arrow-theme="light"] {
+  --bg:#f2f5f9; --panel:#fff; --panel-2:#eaf0f7; --surface:#fff;
+  --text:#182234; --muted:#556477; --faint:#69778a;
+  --line:rgb(26 39 60 / .15); --line-strong:rgb(26 39 60 / .27);
+  color-scheme:light;
+}
+:root[data-arrow-theme="dark"] {
+  --bg:#08090d; --text:#f5f7fb; --muted:#aab3c1; --faint:#8590a2;
+  --line:rgb(249 250 252 / .14); --line-strong:rgb(249 250 252 / .24);
+  color-scheme:dark;
+}
+:root[data-arrow-theme="light"] .waypoint-app {
+  background:radial-gradient(circle at 90% 0%,rgb(var(--arrow-accent-rgb,45,74,118) / .075),transparent 42%),var(--bg);
+  color:var(--text);
+}
+:root[data-arrow-theme="light"] :is(.sidebar,.topbar,.panel,.hero-panel,.planning-editor,.direction-hero,.review-story) {
+  color:var(--text); border-color:var(--line);
+}
+:root[data-arrow-theme="light"] :is(.nav-plus,.primary-button,.capture-row.selected,.nav-item.active,.time-block.visible) {
+  color:var(--text); border-color:var(--line-strong);
+}
+:root[data-arrow-theme="light"] :is(.nav-plus,.primary-button) {
+  background:var(--arrow-accent-color,#263550); color:var(--arrow-accent-on,#fff);
+  border-color:var(--arrow-accent-color,#263550);
+}
+:root[data-arrow-theme="light"] :is(.capture-row.selected,.nav-item.active,.time-block.visible) {
+  background:rgb(var(--arrow-accent-rgb,47,111,237) / .09); color:var(--text);
+}
+:root[data-arrow-theme="light"] :is(.sidebar,.topbar,.panel,.hero-panel) {
+  background-color:color-mix(in srgb,var(--surface,#fff) 95%,var(--arrow-accent-color,#dfe7f3));
+}
+:root[data-arrow-theme="dark"] :is(.sidebar,.topbar,.panel,.hero-panel) { color:var(--text); border-color:var(--line); }
+:root :is(.capture-editor input,.capture-editor textarea,.capture-editor select,.planning-editor input,.planning-editor textarea,.planning-editor select) {
+  background:var(--bg); color:var(--text); border-color:var(--line-strong);
+}
+:root :is(.capture-editor input,.capture-editor textarea,.capture-editor select,.planning-editor input,.planning-editor textarea,.planning-editor select)::placeholder { color:var(--muted); }
+:root[data-arrow-adapt="bloom"] .waypoint-app { --radius:26px; }
+:root[data-arrow-adapt="haven"] .waypoint-app { --radius:18px; }
+:root[data-arrow-adapt="atelier"] .waypoint-app { --radius:8px; }
+:root[data-arrow-adapt="pulse"] .waypoint-app { --radius:20px; }
+:root:not([data-arrow-adapt="core"]) .waypoint-app :is(.panel,.hero-panel,.planning-editor) {
+  border-color:rgb(var(--arrow-accent-rgb,125,140,166) / .2);
+}
+:root[data-arrow-experience="dynamic"] .waypoint-app {
+  background:radial-gradient(at 83% 0%,rgb(var(--arrow-accent-rgb,120,145,190) / .12),transparent 48%),var(--bg);
+}
+:root[data-arrow-theme="light"][data-arrow-experience="glass"] .waypoint-app .sidebar {
+  background:rgb(255 255 255 / .82); backdrop-filter:blur(24px);
+}
+:root[data-arrow-theme="dark"][data-arrow-experience="glass"] .waypoint-app .sidebar {
+  background:rgb(18 22 30 / .82); backdrop-filter:blur(24px);
+}
