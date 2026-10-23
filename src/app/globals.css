@@ -1033,3 +1033,19 @@ button { color: inherit; }
 @media(max-width:390px) {
   :root[data-arrow-adapt]:not([data-arrow-adapt="core"]) .waypoint-app .nav-item span:not(.nav-badge) {font-size:8px!important;}
 }
+
+/* Beta identity material palette. Core keeps its original monochrome layout.
+   Tint the base itself so burgundy, green, cobalt, etc. never sit on an
+   unrelated fixed yellow/brown backdrop. Existing identity geometry stays. */
+:root[data-arrow-adapt]:not([data-arrow-adapt="core"])[data-arrow-theme="light"] .waypoint-app {
+  --bg:color-mix(in srgb,var(--arrow-adapt-primary,#7187a4) 10%,#f9fafb);
+  --panel:color-mix(in srgb,var(--arrow-adapt-primary,#7187a4) 5%,#fff);
+  --panel-2:color-mix(in srgb,var(--arrow-adapt-primary,#7187a4) 8%,#fff);
+  --line:color-mix(in srgb,var(--arrow-adapt-primary,#7187a4) 20%,#dce0e5);
+}
+:root[data-arrow-adapt]:not([data-arrow-adapt="core"])[data-arrow-theme="dark"] .waypoint-app {
+  --bg:color-mix(in srgb,var(--arrow-adapt-primary,#7187a4) 10%,#13161b);
+  --panel:color-mix(in srgb,var(--arrow-adapt-primary,#7187a4) 11%,#22262c);
+  --panel-2:color-mix(in srgb,var(--arrow-adapt-primary,#7187a4) 15%,#2b3037);
+  --line:color-mix(in srgb,var(--arrow-adapt-primary,#7187a4) 22%,#3a424b);
+}
