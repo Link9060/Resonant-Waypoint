@@ -1039,3 +1039,59 @@ html[data-arrow-identity="atelier"] .waypoint-app :is(.panel,.hero-panel) {
   .waypoint-app :is(button,textarea) { transition: none !important; }
   .waypoint-app .task-progress span { transition: none; }
 }
+
+/* ARROW Adapt variations keep the same information architecture. */
+.waypoint-app .nav-item { position: relative; }
+html[data-arrow-identity="bloom"] body {
+  font-family: ui-rounded, Inter, ui-sans-serif, system-ui, sans-serif;
+}
+html[data-arrow-identity="haven"]:not([data-arrow-theme="light"]) {
+  --wp-bg: #100f0e;
+  --wp-sidebar: #131210;
+  --wp-surface: #191715;
+  --wp-surface-raised: #211e1b;
+  --wp-surface-hover: #2a2622;
+  --wp-line: #322f2b;
+  --wp-line-soft: #292621;
+}
+html[data-arrow-identity="haven"][data-arrow-theme="light"] {
+  --wp-bg: #f8f6f2;
+  --wp-sidebar: #fbfaf7;
+  --wp-surface: #fffdfa;
+  --wp-surface-raised: #f3efe9;
+  --wp-surface-hover: #e9e4dc;
+  --wp-line: #ddd6cc;
+  --wp-line-soft: #ede8e2;
+}
+html[data-arrow-identity="atelier"]:not([data-arrow-theme="light"]) {
+  --wp-bg: #141414;
+  --wp-sidebar: #181818;
+  --wp-surface: #202020;
+  --wp-surface-raised: #262626;
+  --wp-surface-hover: #303030;
+  --wp-line: #505050;
+  --wp-line-soft: #353535;
+}
+html[data-arrow-identity="atelier"][data-arrow-theme="light"] {
+  --wp-bg: #f6f4ee;
+  --wp-sidebar: #fffefa;
+  --wp-surface: #fffefa;
+  --wp-surface-raised: #f0ede5;
+  --wp-surface-hover: #e5e1d7;
+  --wp-line: #bcb8af;
+  --wp-line-soft: #dcd8cf;
+}
+html[data-arrow-identity="atelier"] .waypoint-app :is(.panel,.overview-bar,.brand-mark,.header-capture-button,.nav-item,.brain-textarea,.capture-orbit) {
+  border-radius: 1px;
+}
+html[data-arrow-identity="pulse"]:not([data-arrow-theme="light"]) {
+  --wp-line: #303b45;
+  --wp-line-soft: #242d35;
+}
+html[data-arrow-identity="pulse"][data-arrow-theme="light"] {
+  --wp-line: #c6d5de;
+  --wp-line-soft: #dce6ed;
+}
+html[data-arrow-identity="pulse"] .waypoint-app .nav-item.active {
+  border-color: var(--wp-line);
+}
