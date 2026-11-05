@@ -394,3 +394,148 @@ html[data-arrow-theme="light"] :is(.time-block,.time-block.muted) { background:#
 html[data-arrow-theme="light"] :is(.day-column,.horizon-row,.review-line) { border-color:#dce1e6; }
 html[data-arrow-theme="light"] .mini-progress { background:#d8dfe7; }
 html[data-arrow-theme="light"] .primary-button { background:#263648; color:#fff; border-color:#263648; }
+
+/* Capture: words collapse into RAVIN's visual core, then actionable cards emerge.
+   The processing state is controlled by the interpretation lifecycle, not a looping timer. */
+.brain-editor { position:relative; min-height:260px; margin-top:28px; }
+.brain-editor .brain-textarea { display:block; margin:0; height:260px; min-height:260px; transition:opacity .16s ease; }
+.brain-editor.is-processing .brain-textarea { opacity:0; pointer-events:none; }
+.capture-orbit {
+  position:absolute; inset:0; z-index:2; overflow:hidden;
+  display:flex; flex-direction:column; justify-content:center; align-items:center;
+  border:1px solid rgba(255,255,255,.13); border-radius:18px;
+  background:radial-gradient(ellipse at 50% 42%,rgba(100,120,145,.15),rgba(10,12,17,.97) 67%);
+  isolation:isolate;
+}
+.capture-orbit::before {
+  content:""; position:absolute; inset:0; pointer-events:none; opacity:.35;
+  background:repeating-linear-gradient(90deg,transparent 0 42px,rgba(255,255,255,.02) 43px 44px);
+}
+.capture-orbit-visual { position:relative; width:min(100%,680px); height:210px; display:grid; place-items:center; perspective:650px; }
+.capture-orbit-words { position:absolute; inset:0; pointer-events:none; z-index:3; }
+.capture-orbit-word {
+  position:absolute; top:50%; left:50%; display:block; max-width:130px; overflow:hidden;
+  white-space:nowrap; text-overflow:ellipsis; color:rgba(235,241,248,.87);
+  font-size:clamp(9px,1.8vw,12px); font-weight:550; letter-spacing:-.015em;
+  text-shadow:0 0 14px rgba(255,255,255,.18); opacity:0;
+}
+.phase-gathering .capture-orbit-word {
+  animation:captureWordsGather 990ms cubic-bezier(.18,.74,.22,1) var(--word-delay) both;
+}
+@keyframes captureWordsGather {
+  0% { opacity:0; transform:translate(-50%,-50%) translate(var(--source-x),var(--source-y)) scale(.94); filter:blur(2px); }
+  17% { opacity:.96; filter:blur(0); }
+  58% { opacity:.88; }
+  100% { opacity:0; transform:translate(-50%,-50%) translate(0px,0px) scale(.13); filter:blur(3px); }
+}
+.capture-orbit-overflow { position:absolute; right:22px; bottom:8px; color:rgba(255,255,255,.35); font-size:10px; }
+.capture-orbit-sphere {
+  width:194px; height:194px; position:relative; display:grid; place-items:center;
+  transform-style:preserve-3d; opacity:1;
+  filter:drop-shadow(0 0 27px rgba(184,207,239,.2));
+}
+.phase-gathering .capture-orbit-sphere { animation:captureSphereForm 1180ms cubic-bezier(.12,.78,.3,1) both; }
+@keyframes captureSphereForm {
+  0%,43% { transform:scale(.07); opacity:0; filter:blur(12px); }
+  78% { transform:scale(1.12); opacity:.83; filter:blur(0); }
+  100% { transform:scale(1); opacity:1; filter:blur(0); }
+}
+.capture-orbit-particles {
+  position:absolute; inset:0; transform-style:preserve-3d;
+  animation:captureSphereSpin 17s linear infinite;
+}
+@keyframes captureSphereSpin {
+  0% { transform:rotateX(-15deg) rotateY(0deg) rotateZ(-6deg); }
+  50% { transform:rotateX(16deg) rotateY(180deg) rotateZ(6deg); }
+  100% { transform:rotateX(-15deg) rotateY(360deg) rotateZ(-6deg); }
+}
+.capture-orbit-particle {
+  position:absolute; left:50%; top:50%; width:var(--particle-size); height:var(--particle-size);
+  border-radius:50%; background:#f5f8ff; opacity:.9;
+  box-shadow:0 0 7px rgba(222,233,255,.66);
+  transform:translate3d(var(--particle-x),var(--particle-y),var(--particle-z));
+  backface-visibility:visible;
+}
+.capture-orbit-particle:nth-child(5n) { opacity:.38; }
+.capture-orbit-particle:nth-child(7n) { background:#9baec5; box-shadow:0 0 9px rgba(137,169,207,.5); }
+.capture-orbit-center {
+  position:absolute; top:50%; left:50%; width:12px; height:12px; border-radius:50%;
+  transform:translate(-50%,-50%); background:#fff;
+  box-shadow:0 0 0 9px rgba(255,255,255,.035),0 0 36px 13px rgba(220,236,255,.22);
+  animation:captureCenterBreathe 2.3s ease-in-out infinite;
+}
+@keyframes captureCenterBreathe {
+  0%,100% { opacity:.78; scale:.85; } 50% { opacity:1; scale:1.22; }
+}
+.capture-orbit-halo {
+  position:absolute; inset:9px; border-radius:50%;
+  border:1px solid rgba(225,240,255,.18); pointer-events:none;
+}
+.capture-orbit-halo-one { transform:rotateX(74deg) rotateZ(24deg); animation:captureHaloTurn 8s linear infinite; }
+.capture-orbit-halo-two { transform:rotateY(70deg) rotateZ(-22deg); opacity:.35; }
+@keyframes captureHaloTurn {
+  to { transform:rotateX(74deg) rotateZ(384deg); }
+}
+.capture-orbit-caption {
+  position:relative; z-index:5; display:flex; align-items:center; gap:9px;
+  margin-top:-8px; font-size:11px; font-weight:570; letter-spacing:.025em; color:rgba(244,248,255,.76);
+}
+.capture-orbit-pulse {
+  display:block; width:6px; height:6px; border-radius:50%; background:#e9f3ff;
+  box-shadow:0 0 12px rgba(224,238,255,.8); animation:captureStatusPulse 1.35s ease-in-out infinite;
+}
+@keyframes captureStatusPulse { 50% { opacity:.36; scale:.74; } }
+.phase-releasing .capture-orbit-sphere { animation:captureSphereRelease 560ms cubic-bezier(.24,.5,.3,1) both; }
+.phase-releasing .capture-orbit-caption { animation:captureCaptionRelease 420ms ease-out both; }
+.phase-releasing.capture-orbit { animation:captureOverlayExit 580ms ease-in both; }
+@keyframes captureSphereRelease {
+  0% { opacity:1; transform:scale(1); }
+  55% { opacity:.9; transform:scale(1.28); filter:blur(0); }
+  100% { opacity:0; transform:scale(2.4); filter:blur(14px); }
+}
+@keyframes captureCaptionRelease { to { opacity:0; transform:translateY(12px); } }
+@keyframes captureOverlayExit { 0%,52% { opacity:1; } 100% { opacity:0; } }
+.dump-error { margin:10px 0 0; color:#f1b0b0; font-size:12px; }
+.capture-panel { animation:captureResultsAppear .45s ease-out both; }
+.capture-guidance {
+  display:flex; align-items:center; justify-content:space-between; gap:22px;
+  margin-bottom:20px; padding:19px 21px; border:1px solid rgba(245,248,255,.11);
+  background:linear-gradient(100deg,rgba(230,239,250,.075),rgba(230,239,250,.015));
+  border-radius:15px;
+}
+.capture-guidance strong { display:block; margin-top:8px; font-size:14px; font-weight:610; line-height:1.5; }
+.capture-guidance p { max-width:190px; margin:0; color:var(--muted); font-size:11px; line-height:1.55; }
+.capture-panel .capture-row { animation:captureResultsAppear .37s cubic-bezier(.2,.75,.3,1) both; }
+@keyframes captureResultsAppear {
+  from { opacity:0; transform:translateY(14px); filter:blur(3px); }
+  to { opacity:1; transform:translateY(0); filter:blur(0); }
+}
+.capture-row:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+html[data-arrow-theme="light"] .capture-orbit {
+  background:radial-gradient(ellipse at 50% 42%,#e8eef6,#f6f8fa 70%);
+  border-color:#cbd5e1;
+}
+html[data-arrow-theme="light"] .capture-orbit-word { color:#283c53; text-shadow:none; }
+html[data-arrow-theme="light"] .capture-orbit-caption { color:#334457; }
+html[data-arrow-theme="light"] .capture-orbit-pulse { background:#334457; box-shadow:0 0 7px #70869f; }
+html[data-arrow-theme="light"] .capture-orbit-particle { background:#384e66; box-shadow:0 0 5px rgba(65,86,113,.34); }
+html[data-arrow-theme="light"] .capture-orbit-particle:nth-child(7n) { background:#8197ae; }
+html[data-arrow-theme="light"] .capture-orbit-center { background:#33475f; box-shadow:0 0 0 9px rgba(35,60,88,.05),0 0 23px 10px rgba(50,83,119,.19); }
+html[data-arrow-theme="light"] .capture-orbit-halo { border-color:rgba(40,67,94,.2); }
+html[data-arrow-theme="light"] .capture-orbit-overflow { color:#607083; }
+html[data-arrow-theme="light"] .capture-guidance { border-color:#d8e0e9; background:#f5f7fa; }
+
+@media (max-width:680px) {
+  .capture-orbit-visual { height:204px; }
+  .capture-orbit-word { font-size:10px; }
+  .capture-guidance { display:block; }
+  .capture-guidance p { max-width:none; margin-top:8px; }
+}
+@media (prefers-reduced-motion:reduce) {
+  .capture-orbit *, .capture-orbit, .capture-panel, .capture-panel .capture-row {
+    animation:none !important; transition:none !important;
+  }
+  .capture-orbit-word, .capture-orbit-overflow { display:none; }
+  .capture-orbit-sphere { opacity:1; transform:none; filter:none; }
+  .capture-orbit.phase-releasing { opacity:0; }
+}
