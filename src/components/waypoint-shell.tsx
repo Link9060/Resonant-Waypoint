@@ -434,14 +434,11 @@ function DumpView({
     <div className="dump-layout">
       <section className="panel dump-input-panel">
         <div className="dump-prompt">
-          <BeaconIcon size={50} active />
+          <div className="dump-prompt-mark"><BeaconIcon size={26} /></div>
           <div>
-            <div className="eyebrow">NO ORGANIZING REQUIRED</div>
-            <h2>What's going on?</h2>
-            <p>
-              Say everything. Homework, ideas, things you're worried you'll forget, stuff you want
-              to build, dates, goals — messy is fine.
-            </p>
+            <div className="eyebrow">CAPTURE / INBOX</div>
+            <h2>Get it out of your head.</h2>
+            <p>Tasks, ideas, reminders, unfinished thoughts. Write freely, then review what can become an action.</p>
           </div>
         </div>
 
@@ -464,7 +461,7 @@ function DumpView({
           <span>
             {dump.length
               ? `${dump.split(/\s+/).filter(Boolean).length} words`
-              : "Your brain, unfiltered."}
+              : "A blank space to think."}
           </span>
           <button
             className="primary-button"
@@ -472,7 +469,7 @@ function DumpView({
             onClick={processDump}
           >
             <SparkIcon width={17} height={17} />
-            Make sense of this
+            Organize capture
           </button>
         </div>
       </section>
@@ -481,8 +478,8 @@ function DumpView({
         <section className="panel capture-panel">
           <div className="panel-heading">
             <div>
-              <div className="eyebrow">CAPTURE INTERPRETATION · PREVIEW</div>
-              <h3>{captures.length} things worth sorting.</h3>
+              <div className="eyebrow">CAPTURE / LOCAL PREVIEW</div>
+              <h3>Review your items</h3>
             </div>
             <span className="soft-pill">{acceptedCount} selected</span>
           </div>
@@ -502,6 +499,7 @@ function DumpView({
               <button
                 key={item.id}
                 className={`capture-row ${item.accepted ? "selected" : ""}`}
+                aria-pressed={Boolean(item.accepted)}
                 style={{ animationDelay: `${index * 65}ms` }}
                 onClick={() => toggleCapture(item.id)}
               >
@@ -519,13 +517,13 @@ function DumpView({
           </div>
 
           <div className="capture-footer">
-            <span>Nothing changes until you approve it.</span>
+            <span>Nothing is added until you approve your selection.</span>
             <button
               className="primary-button"
               onClick={acceptCaptures}
               disabled={!acceptedCount}
             >
-              Add selected
+              Add {acceptedCount} selected
             </button>
           </div>
         </section>
@@ -534,36 +532,30 @@ function DumpView({
   );
 }
 
-function PlansView() {
+function PlansView({ onCapture }: { onCapture: () => void }) {
   return (
-    <div className="stack">
-      <section className="section-intro">
-        <div className="eyebrow">OUTCOMES → ROUTES → MOVES</div>
-        <h2>Plans turn direction into something you can actually do.</h2>
-      </section>
-
-      <div className="plan-grid">
-        {samplePlans.map((plan) => (
-          <article className="panel plan-card" key={plan.title}>
-            <div className="plan-top">
-              <BeaconIcon size={28} />
-              <span>{plan.progress}%</span>
-            </div>
-            <h3>{plan.title}</h3>
-            <div className="mini-progress">
-              <span style={{ width: `${plan.progress}%` }} />
-            </div>
-            <div className="next-step">
-              <small>NEXT MOVE</small>
-              <strong>{plan.next}</strong>
-            </div>
-          </article>
-        ))}
-
-        <button className="panel new-plan-card">
-          <PlusIcon width={22} height={22} />
-          <span>New plan</span>
-        </button>
+    <div className="workspace-page">
+      <div className="section-intro">
+        <div className="eyebrow">PLANS / WORK IN PROGRESS</div>
+        <h2>Give your ideas a direction.</h2>
+        <p>A place for projects, milestones, and the small steps that move them forward.</p>
+      </div>
+      <div className="plans-layout">
+        <section className="panel plans-empty">
+          <span className="empty-indicator"><PlansIcon width={23} height={23} /></span>
+          <h3>Your plans will live here.</h3>
+          <p>Plan management isn't connected yet. For now, capture project ideas and review how they're classified.</p>
+          <button type="button" className="secondary-button" onClick={onCapture}>
+            <PlusIcon width={16} height={16} /> Capture a project
+          </button>
+        </section>
+        <aside className="panel plans-guide">
+          <div className="eyebrow">THE APPROACH</div>
+          <h3>From intention to action</h3>
+          <div className="guide-step"><span>01</span><div><strong>Capture</strong><p>Get the idea out of your head.</p></div></div>
+          <div className="guide-step"><span>02</span><div><strong>Clarify</strong><p>Decide what matters and what doesn't.</p></div></div>
+          <div className="guide-step"><span>03</span><div><strong>Move</strong><p>Break it into realistic next steps.</p></div></div>
+        </aside>
       </div>
     </div>
   );
@@ -573,46 +565,54 @@ function CalendarView({ events }: { events: SharedEvent[] }) {
   const today = new Date();
   today.setHours(12, 0, 0, 0);
   const start = new Date(today);
-  start.setDate(today.getDate() - today.getDay() + 1);
+  start.setDate(today.getDate() - ((today.getDay() + 6) % 7));
+  const localDate = (date: Date) =>
+    [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
 
   const days = Array.from({ length: 7 }, (_, index) => {
     const date = new Date(start);
     date.setDate(start.getDate() + index);
-    const iso = date.toISOString().slice(0, 10);
+    const iso = localDate(date);
     return {
       iso,
-      label: date.toLocaleDateString([], { weekday: "short", day: "numeric" }).toUpperCase(),
-      isToday: iso === today.toISOString().slice(0, 10),
+      day: date.toLocaleDateString("en-US", { weekday: "short" }),
+      number: date.getDate(),
+      isToday: iso === localDate(today),
       events: events
         .filter((event) => event.date === iso)
         .sort((a, b) => (a.time || "").localeCompare(b.time || "")),
     };
   });
-
+  const weekLabel = start.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
   return (
-    <div className="stack">
-      <section className="section-intro">
-        <div className="eyebrow">TIME</div>
-        <h2>Your plans need somewhere to live.</h2>
-      </section>
-
+    <div className="workspace-page">
+      <div className="section-intro">
+        <div className="eyebrow">CALENDAR / THIS WEEK</div>
+        <h2>See what's ahead.</h2>
+        <p>Your approved events show up in this weekly view.</p>
+      </div>
       <section className="panel week-panel">
-        <div className="week-row">
-          {days.map((day) => (
-            <div
-              className={`day-column ${day.isToday ? "today-column" : ""}`}
-              key={day.iso}
-            >
-              <div className="day-name">{day.label}</div>
-              {day.events.length ? day.events.map((event) => (
-                <div className="time-block visible" key={event.id}>
-                  {event.time ? `${event.time} · ` : ""}{event.title}
+        <div className="panel-heading week-heading">
+          <div><div className="eyebrow">MONDAY – SUNDAY</div><h3>Week of {weekLabel}</h3></div>
+          <span className="soft-pill">{events.length} events saved</span>
+        </div>
+        <div className="week-scroll">
+          <div className="week-row">
+            {days.map((day) => (
+              <div className={"day-column " + (day.isToday ? "today-column" : "")} key={day.iso}>
+                <div className="day-name"><span>{day.day}</span><strong>{day.number}</strong></div>
+                <div className="day-events">
+                  {day.events.map((event) => (
+                    <div className="time-block visible" key={event.id}>
+                      {event.time && <span className="event-time">{event.time}</span>}
+                      <strong>{event.title}</strong>
+                    </div>
+                  ))}
+                  {!day.events.length && <div className="day-empty">No events</div>}
                 </div>
-              )) : (
-                <div className="time-block muted">Clear</div>
-              )}
-            </div>
-          ))}
+              </div>
+            ))}
+          </div>
         </div>
       </section>
     </div>
@@ -620,80 +620,65 @@ function CalendarView({ events }: { events: SharedEvent[] }) {
 }
 
 function DirectionView() {
+  const prompts = [
+    { horizon: "NOW", title: "What needs attention?", detail: "The commitments and decisions closest to you." },
+    { horizon: "NEXT", title: "What are you building toward?", detail: "The projects and capabilities you want to develop." },
+    { horizon: "LATER", title: "What matters long term?", detail: "A bigger direction, without requiring every answer." }
+  ];
   return (
-    <div className="direction-layout">
-      <section className="panel direction-hero">
-        <div className="direction-beacon">
-          <BeaconIcon size={92} active />
-        </div>
-        <div className="eyebrow">YOUR DIRECTION</div>
-        <h2>What are you trying to make your life become?</h2>
-        <p>
-          You don't need the entire answer. Start with a few directions worth moving toward.
-        </p>
-      </section>
-
-      <section className="panel horizons">
-        <div className="panel-heading">
-          <div>
-            <div className="eyebrow">HORIZONS</div>
-            <h3>Near → Far</h3>
+    <div className="workspace-page">
+      <div className="section-intro">
+        <div className="eyebrow">DIRECTION / LONG VIEW</div>
+        <h2>Know what you're moving toward.</h2>
+        <p>Not another to-do list. A place to keep your priorities in perspective.</p>
+      </div>
+      <div className="direction-layout">
+        <section className="panel direction-hero">
+          <div className="direction-symbol"><DirectionIcon width={30} height={30} /></div>
+          <div className="direction-hero-copy">
+            <div className="eyebrow">YOUR DIRECTION</div>
+            <h3>Make space for the bigger picture.</h3>
+            <p>No directions have been saved here yet. Future updates will let you build a personal set of horizons.</p>
           </div>
-        </div>
-
-        {[
-          ["NOW", "Get the important stuff under control"],
-          ["NEAR", "Build things that actually work"],
-          ["NEXT", "Become genuinely capable at engineering"],
-          ["FAR", "Create work and products that matter"]
-        ].map(([range, copy]) => (
-          <div className="horizon-row" key={range}>
-            <span>{range}</span>
-            <strong>{copy}</strong>
-          </div>
-        ))}
-      </section>
+        </section>
+        <section className="panel horizons">
+          <div className="panel-heading"><div><div className="eyebrow">REFLECTION</div><h3>Questions worth keeping</h3></div></div>
+          {prompts.map((prompt) => (
+            <div className="horizon-row" key={prompt.horizon}>
+              <span>{prompt.horizon}</span>
+              <div><strong>{prompt.title}</strong><p>{prompt.detail}</p></div>
+            </div>
+          ))}
+        </section>
+      </div>
     </div>
   );
 }
 
-function ReviewView() {
+function ReviewView({ items, events }: { items: TodayItem[]; events: SharedEvent[] }) {
+  const done = items.filter((item) => item.completed).length;
+  const open = items.length - done;
+  const next = items.find((item) => !item.completed);
   return (
-    <div className="review-grid">
-      <section className="panel metric-card">
-        <span className="metric">12</span>
-        <small>moves completed</small>
-      </section>
-      <section className="panel metric-card">
-        <span className="metric">3</span>
-        <small>plans advanced</small>
-      </section>
-      <section className="panel metric-card">
-        <span className="metric">2</span>
-        <small>things repeatedly postponed</small>
-      </section>
-
-      <section className="panel review-story">
-        <div className="eyebrow">THIS WEEK</div>
-        <h2>What actually happened?</h2>
-        <p>
-          Waypoint should reflect reality, not grade you. Reviews surface where your time went,
-          what moved, what stalled, and what you may want to change.
-        </p>
-
-        <div className="review-line">
-          <span>Most attention</span>
-          <strong>ARROW</strong>
-        </div>
-        <div className="review-line">
-          <span>Lost momentum</span>
-          <strong>Personal projects</strong>
-        </div>
-        <div className="review-line">
-          <span>Worth reconsidering</span>
-          <strong>2 postponed items</strong>
-        </div>
-      </section>
+    <div className="workspace-page">
+      <div className="section-intro">
+        <div className="eyebrow">REVIEW / CURRENT SNAPSHOT</div>
+        <h2>See where things stand.</h2>
+        <p>A simple look at your current tasks and saved events, without made-up metrics.</p>
+      </div>
+      <div className="review-grid">
+        <section className="panel metric-card"><span className="metric">{done}</span><small>completed tasks</small></section>
+        <section className="panel metric-card"><span className="metric">{open}</span><small>tasks remaining</small></section>
+        <section className="panel metric-card"><span className="metric">{events.length}</span><small>events on calendar</small></section>
+        <section className="panel review-story">
+          <div className="eyebrow">AT A GLANCE</div>
+          <h3>Progress, not pressure.</h3>
+          <p>These numbers are based on the current items in your workspace. A historical review will become possible when activity tracking is available.</p>
+          <div className="review-line"><span>Tasks tracked</span><strong>{items.length}</strong></div>
+          <div className="review-line"><span>Completion</span><strong>{items.length ? Math.round((done / items.length) * 100) + "%" : "No tasks yet"}</strong></div>
+          <div className="review-line"><span>Up next</span><strong>{next?.title ?? "Nothing queued"}</strong></div>
+        </section>
+      </div>
     </div>
   );
 }
