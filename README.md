@@ -46,7 +46,7 @@ A lightweight local classifier remains only as a fallback when the RAVIN service
 - Production writes are protected against accidental double-submit.
 - `scripts/production-check.mjs` rejects known prototype regressions.
 - Pull requests run locked dependency install, critical dependency audit, production checks, TypeScript, and a full static export build.
-- Waypoint is pinned to Next.js 16.3.7.
+- Waypoint uses a patched, audited Next.js 16.4.5 release.
 
 ## Deployment
 
