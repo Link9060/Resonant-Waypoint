@@ -18,7 +18,7 @@ import type { CapturedItem, TodayItem, WaypointTab } from "@/lib/types";
 
 const tabs = [
   { id: "today", label: "Today", icon: TodayIcon },
-  { id: "dump", label: "Dump", icon: DumpIcon },
+  { id: "dump", label: "Capture", icon: DumpIcon },
   { id: "plans", label: "Plans", icon: PlansIcon },
   { id: "calendar", label: "Calendar", icon: CalendarIcon },
   { id: "direction", label: "Direction", icon: DirectionIcon },
@@ -49,12 +49,6 @@ function safeJsonList<T>(key: string): T[] {
   }
 }
 
-const samplePlans = [
-  { title: "Build Waypoint", progress: 12, next: "Define the first working brain-dump flow" },
-  { title: "ARROW ecosystem", progress: 38, next: "Connect Waypoint into the ARROW shell" },
-  { title: "Personal direction", progress: 5, next: "Add the first long-range horizon" }
-];
-
 export function WaypointShell() {
   const [activeTab, setActiveTab] = useState<WaypointTab>("today");
   const [dump, setDump] = useState("");
@@ -81,14 +75,12 @@ export function WaypointShell() {
     const loadShared = () => {
       const sharedTasks = safeJsonList<{ id?: string; text?: string; done?: boolean; createdAt?: number }>(TASKS_KEY)
         .filter((task) => typeof task.id === "string" && typeof task.text === "string");
-      if (sharedTasks.length) {
-        setTodayItems(sharedTasks.map((task) => ({
-          id: task.id!,
-          title: task.text!,
-          meta: "ARROW task",
-          completed: Boolean(task.done),
-        })));
-      }
+      setTodayItems(sharedTasks.map((task) => ({
+        id: task.id!,
+        title: task.text!,
+        meta: "ARROW task",
+        completed: Boolean(task.done),
+      })));
 
       setEvents(
         safeJsonList<SharedEvent>(EVENTS_KEY)
@@ -206,26 +198,24 @@ export function WaypointShell() {
 
   return (
     <main className="waypoint-app">
-      <div className="ambient-grid" />
-      <div className="ambient-glow ambient-glow-a" />
-      <div className="ambient-glow ambient-glow-b" />
-
       <aside className="sidebar">
         <div className="brand-row">
           <div className="brand-mark">
-            <BeaconIcon size={34} active />
+            <BeaconIcon size={29} />
           </div>
           <div>
-            <div className="eyebrow">ARROW</div>
+            <div className="eyebrow">ARROW / WORKSPACE</div>
             <div className="brand-name">Waypoint</div>
           </div>
         </div>
 
-        <nav className="nav">
+        <div className="nav-heading">WORKSPACE</div>
+        <nav className="nav" aria-label="Waypoint sections">
           {tabs.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
               className={`nav-item ${activeTab === id ? "active" : ""}`}
+              aria-current={activeTab === id ? "page" : undefined}
               onClick={() => setActiveTab(id)}
             >
               <Icon width={19} height={19} />
@@ -261,26 +251,24 @@ export function WaypointShell() {
             <span className="orbit-dot" />
             Back to Orbit
           </button>
-          <div className="sidebar-caption">Give your life direction.</div>
+          <div className="sidebar-caption">Part of the ARROW ecosystem</div>
         </div>
       </aside>
 
       <section className="content-shell">
         <header className="topbar">
-          <div>
+          <div className="topbar-heading">
             <div className="eyebrow">{tabEyebrow(activeTab)}</div>
             <h1>{tabTitle(activeTab)}</h1>
           </div>
-
           <div className="topbar-actions">
             <div data-arrow-os-shell data-module="waypoint" suppressHydrationWarning />
-            <button className="icon-button" aria-label="Quick add" onClick={() => setActiveTab("dump")}>
-              <PlusIcon width={18} height={18} />
-            </button>
-            <button className="ravin-chip" onClick={() => setActiveTab("dump")}>
-              <SparkIcon width={16} height={16} />
-              Ask RAVIN
-            </button>
+            {activeTab !== "dump" && (
+              <button className="header-capture-button" type="button" onClick={() => setActiveTab("dump")}>
+                <PlusIcon width={16} height={16} />
+                <span>New capture</span>
+              </button>
+            )}
           </div>
         </header>
 
@@ -309,10 +297,10 @@ export function WaypointShell() {
             />
           )}
 
-          {activeTab === "plans" && <PlansView />}
+          {activeTab === "plans" && <PlansView onCapture={() => setActiveTab("dump")} />}
           {activeTab === "calendar" && <CalendarView events={events} />}
           {activeTab === "direction" && <DirectionView />}
-          {activeTab === "review" && <ReviewView />}
+          {activeTab === "review" && <ReviewView items={todayItems} events={events} />}
         </div>
       </section>
     </main>
@@ -330,109 +318,90 @@ function TodayView({
   progress: number;
   onDump: () => void;
 }) {
+  const completed = items.filter((item) => item.completed).length;
+  const remaining = items.length - completed;
+  const nextItem = items.find((item) => !item.completed);
   return (
-    <div className="page-grid today-grid">
-      <section className="hero-panel">
-        <div className="hero-copy">
-          <div className="eyebrow">RIGHT NOW</div>
-          <h2>One clear next move.</h2>
-          <p>
-            Waypoint keeps the whole picture nearby without making you stare at all of it at once.
-          </p>
+    <div className="today-layout">
+      <section className="overview-bar" aria-label="Today's overview">
+        <div className="overview-copy">
+          <div className="eyebrow">YOUR DAY, IN FOCUS</div>
+          <h2>One thing at a time.</h2>
+          <p>Keep what matters visible. Everything else can wait its turn.</p>
         </div>
-
-        <div className="progress-orbit">
-          <div className="progress-value">{progress}%</div>
-          <div className="progress-label">today</div>
-          <svg viewBox="0 0 120 120" aria-hidden="true">
-            <circle cx="60" cy="60" r="51" className="progress-track" />
-            <circle
-              cx="60"
-              cy="60"
-              r="51"
-              className="progress-ring"
-              pathLength="100"
-              strokeDasharray={`${progress} ${100 - progress}`}
-            />
-          </svg>
+        <div className="overview-stats">
+          <div className="overview-stat"><strong>{remaining}</strong><span>To do</span></div>
+          <div className="overview-stat"><strong>{completed}</strong><span>Done</span></div>
         </div>
       </section>
 
-      <section className="panel primary-list-panel">
-        <div className="panel-heading">
-          <div>
-            <div className="eyebrow">TODAY</div>
-            <h3>Your moves</h3>
+      <div className="today-workspace">
+        <section className="panel primary-list-panel">
+          <header className="panel-heading">
+            <div>
+              <div className="eyebrow">TODAY / TASKS</div>
+              <h3>Your list</h3>
+            </div>
+            <span className="soft-pill">{items.length ? progress + "% complete" : "Ready when you are"}</span>
+          </header>
+          <div className="task-progress" role="progressbar" aria-label="Tasks completed" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}>
+            <span style={{ width: progress + "%" }} />
           </div>
-          <span className="soft-pill">
-            {items.filter((item) => !item.completed).length} remaining
-          </span>
-        </div>
 
-        <div className="task-list">
-          {items.map((item, index) => (
-            <button
-              className={`task-row ${item.completed ? "done" : ""}`}
-              key={item.id}
-              onClick={() =>
-                setItems((current) =>
-                  current.map((currentItem) =>
+          {items.length ? (
+            <div className="task-list">
+              {items.map((item, index) => (
+                <button
+                  type="button"
+                  aria-pressed={Boolean(item.completed)}
+                  className={"task-row " + (item.completed ? "done" : "")}
+                  key={item.id}
+                  onClick={() => setItems((current) => current.map((currentItem) =>
                     currentItem.id === item.id
                       ? { ...currentItem, completed: !currentItem.completed }
                       : currentItem
-                  )
-                )
-              }
-            >
-              <span className="task-index">
-                {String(index + 1).padStart(2, "0")}
-              </span>
-              <span className="task-check">{item.completed ? "✓" : ""}</span>
-              <span className="task-main">
-                <strong>{item.title}</strong>
-                <small>{item.meta}</small>
-              </span>
-            </button>
-          ))}
-        </div>
-      </section>
+                  ))}
+                >
+                  <span className="task-check" aria-hidden="true">{item.completed ? "✓" : ""}</span>
+                  <span className="task-main">
+                    <strong>{item.title}</strong>
+                    <small>{item.meta}</small>
+                  </span>
+                  <span className="task-index">{String(index + 1).padStart(2, "0")}</span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="list-empty">
+              <span className="empty-indicator"><TodayIcon width={22} height={22} /></span>
+              <h4>Nothing on your list yet.</h4>
+              <p>Capture a thought and turn it into a task. Start with what's on your mind.</p>
+              <button className="text-action" type="button" onClick={onDump}>Open Capture <span aria-hidden="true">↗</span></button>
+            </div>
+          )}
+        </section>
 
-      <button className="panel dump-card" onClick={onDump}>
-        <div className="dump-card-icon">
-          <SparkIcon width={18} height={18} />
-        </div>
-        <div>
-          <div className="eyebrow">BRAIN DUMP</div>
-          <h3>Too much going on?</h3>
-          <p>
-            Throw the mess here. Waypoint + RAVIN will sort it into tasks, notes, plans, and time.
-          </p>
-        </div>
-        <span className="arrow-glyph">↗</span>
-      </button>
+        <aside className="today-aside">
+          <section className="panel focus-panel">
+            <div className="eyebrow">UP NEXT</div>
+            <div className="focus-content">
+              <span className="focus-marker" aria-hidden="true">01</span>
+              <h3>{nextItem?.title ?? "You're all caught up."}</h3>
+              <p>{nextItem ? "The next unchecked task in your list." : "Add something when there's a next move worth making."}</p>
+            </div>
+          </section>
 
-      <section className="panel now-card">
-        <div className="panel-heading">
-          <div>
-            <div className="eyebrow">FOCUS</div>
-            <h3>Current objective</h3>
-          </div>
-        </div>
-
-        <div className="focus-objective">
-          <BeaconIcon size={42} active />
-          <div>
-            <strong>
-              {items.find((item) => !item.completed)?.title ?? "You're clear."}
-            </strong>
-            <p>
-              {items.find((item) => !item.completed)
-                ? "This is the next unresolved item in today's route."
-                : "Nothing else is demanding your attention."}
-            </p>
-          </div>
-        </div>
-      </section>
+          <button type="button" className="panel capture-entry" onClick={onDump}>
+            <span className="capture-entry-icon"><SparkIcon width={18} height={18} /></span>
+            <span className="capture-entry-content">
+              <span className="eyebrow">CAPTURE</span>
+              <strong>Clear your head.</strong>
+              <small>Write it down now. Sort it out afterward.</small>
+            </span>
+            <span className="capture-entry-arrow" aria-hidden="true">↗</span>
+          </button>
+        </aside>
+      </div>
     </div>
   );
 }
@@ -732,7 +701,7 @@ function ReviewView() {
 function tabEyebrow(tab: WaypointTab) {
   const map: Record<WaypointTab, string> = {
     today: "WAYPOINT / TODAY",
-    dump: "WAYPOINT / DUMP",
+    dump: "WAYPOINT / CAPTURE",
     plans: "WAYPOINT / PLANS",
     calendar: "WAYPOINT / CALENDAR",
     direction: "WAYPOINT / DIRECTION",
@@ -745,7 +714,7 @@ function tabEyebrow(tab: WaypointTab) {
 function tabTitle(tab: WaypointTab) {
   const map: Record<WaypointTab, string> = {
     today: "Today",
-    dump: "Brain dump",
+    dump: "Capture",
     plans: "Plans",
     calendar: "Calendar",
     direction: "Direction",
