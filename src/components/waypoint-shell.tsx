@@ -122,8 +122,8 @@ export function WaypointShell() {
   const [interpretation, setInterpretation] = useState<WaypointInterpretation | null>(null);
   const [capturePhase, setCapturePhase] = useState<"idle" | CapturePhase>("idle");
   const [processingText, setProcessingText] = useState("");
-  const gatherTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const releaseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const gatherTimer = useRef<number | null>(null);
+  const releaseTimer = useRef<number | null>(null);
 
   useEffect(() => () => {
     if (gatherTimer.current) window.clearTimeout(gatherTimer.current);
