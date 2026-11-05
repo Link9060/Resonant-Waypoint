@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { CaptureOrbit, type CapturePhase } from "./capture-orbit";
 import { BeaconIcon } from "./beacon-icon";
 import {
   CalendarIcon,
@@ -29,6 +30,8 @@ const initialToday: TodayItem[] = [];
 const TASKS_KEY = "arrow_os_tasks_v1";
 const EVENTS_KEY = "arrow_os_events_v1";
 const ORBIT_URL = "https://link9060.github.io/Resonant-Orbit/";
+
+const waitForAnimation = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms));
 
 type SharedEvent = {
   id: string;
@@ -59,6 +62,14 @@ export function WaypointShell() {
   const [todayItems, setTodayItems] = useState(initialToday);
   const [events, setEvents] = useState<SharedEvent[]>([]);
   const [storageReady, setStorageReady] = useState(false);
+  const [capturePhase, setCapturePhase] = useState<"idle" | CapturePhase>("idle");
+  const [processingText, setProcessingText] = useState("");
+  const [captureError, setCaptureError] = useState("");
+  const captureRun = useRef(0);
+
+  useEffect(() => () => {
+    captureRun.current += 1;
+  }, []);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -110,9 +121,38 @@ export function WaypointShell() {
   const completed = todayItems.filter((item) => item.completed).length;
   const progress = todayItems.length ? Math.round((completed / todayItems.length) * 100) : 0;
 
-  function processDump() {
-    const result = interpretBrainDump(dump);
-    setCaptures(result);
+  async function processDump() {
+    const input = dump.trim();
+    if (!input || capturePhase !== "idle") return;
+
+    const run = ++captureRun.current;
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    setProcessingText(input);
+    setCaptureError("");
+    setCaptures([]);
+    setCapturePhase("gathering");
+
+    try {
+      await waitForAnimation(reducedMotion ? 0 : 1260);
+      if (run !== captureRun.current) return;
+
+      setCapturePhase("thinking");
+      // The current standalone Waypoint build uses a local parser.
+      // A future async RAVIN request can replace this call without changing the animation.
+      const result = interpretBrainDump(input);
+      await waitForAnimation(reducedMotion ? 0 : 540);
+      if (run !== captureRun.current) return;
+
+      setCaptures(result);
+      setCapturePhase("releasing");
+      await waitForAnimation(reducedMotion ? 0 : 580);
+    } catch {
+      if (run === captureRun.current) {
+        setCaptureError("Capture couldn't be processed. Your text is still here. Try again.");
+      }
+    } finally {
+      if (run === captureRun.current) setCapturePhase("idle");
+    }
   }
 
   function toggleCapture(id: string) {
@@ -263,6 +303,9 @@ export function WaypointShell() {
               toggleCapture={toggleCapture}
               acceptCaptures={acceptCaptures}
               acceptedCount={acceptedCount}
+              capturePhase={capturePhase}
+              processingText={processingText}
+              captureError={captureError}
             />
           )}
 
@@ -401,7 +444,10 @@ function DumpView({
   processDump,
   toggleCapture,
   acceptCaptures,
-  acceptedCount
+  acceptedCount,
+  capturePhase,
+  processingText,
+  captureError
 }: {
   dump: string;
   setDump: (value: string) => void;
@@ -410,7 +456,11 @@ function DumpView({
   toggleCapture: (id: string) => void;
   acceptCaptures: () => void;
   acceptedCount: number;
+  capturePhase: "idle" | CapturePhase;
+  processingText: string;
+  captureError: string;
 }) {
+  const firstMove = captures.find((item) => item.type === "task" || item.type === "project") ?? captures[0];
   return (
     <div className="dump-layout">
       <section className="panel dump-input-panel">
@@ -426,12 +476,20 @@ function DumpView({
           </div>
         </div>
 
-        <textarea
-          value={dump}
-          onChange={(event) => setDump(event.target.value)}
-          placeholder="Okay, so tomorrow I need to..."
-          className="brain-textarea"
-        />
+        <div className={`brain-editor ${capturePhase !== "idle" ? "is-processing" : ""}`}>
+          <textarea
+            value={dump}
+            onChange={(event) => setDump(event.target.value)}
+            placeholder="Okay, so tomorrow I need to..."
+            className="brain-textarea"
+            aria-label="Your brain dump"
+            disabled={capturePhase !== "idle"}
+          />
+          {capturePhase !== "idle" && (
+            <CaptureOrbit text={processingText} phase={capturePhase} />
+          )}
+        </div>
+        {captureError && <p className="dump-error" role="alert">{captureError}</p>}
 
         <div className="dump-actions">
           <span>
@@ -441,7 +499,7 @@ function DumpView({
           </span>
           <button
             className="primary-button"
-            disabled={!dump.trim()}
+            disabled={!dump.trim() || capturePhase !== "idle"}
             onClick={processDump}
           >
             <SparkIcon width={17} height={17} />
@@ -454,17 +512,28 @@ function DumpView({
         <section className="panel capture-panel">
           <div className="panel-heading">
             <div>
-              <div className="eyebrow">RAVIN INTERPRETATION</div>
-              <h3>I found {captures.length} things.</h3>
+              <div className="eyebrow">CAPTURE INTERPRETATION · PREVIEW</div>
+              <h3>{captures.length} things worth sorting.</h3>
             </div>
             <span className="soft-pill">{acceptedCount} selected</span>
           </div>
 
+          {firstMove && (
+            <div className="capture-guidance">
+              <div>
+                <div className="eyebrow">SUGGESTED FIRST MOVE</div>
+                <strong>{firstMove.title}</strong>
+              </div>
+              <p>Review the steps below. Only the items you approve will be added.</p>
+            </div>
+          )}
+
           <div className="capture-list">
-            {captures.map((item) => (
+            {captures.map((item, index) => (
               <button
                 key={item.id}
                 className={`capture-row ${item.accepted ? "selected" : ""}`}
+                style={{ animationDelay: `${index * 65}ms` }}
                 onClick={() => toggleCapture(item.id)}
               >
                 <span className={`type-dot type-${item.type}`} />
