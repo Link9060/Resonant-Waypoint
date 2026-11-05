@@ -18,7 +18,7 @@ import type { CapturedItem, TodayItem, WaypointTab } from "@/lib/types";
 
 const tabs = [
   { id: "today", label: "Today", icon: TodayIcon },
-  { id: "dump", label: "Dump", icon: DumpIcon },
+  { id: "dump", label: "Capture", icon: DumpIcon },
   { id: "plans", label: "Plans", icon: PlansIcon },
   { id: "calendar", label: "Calendar", icon: CalendarIcon },
   { id: "direction", label: "Direction", icon: DirectionIcon },
@@ -49,12 +49,6 @@ function safeJsonList<T>(key: string): T[] {
   }
 }
 
-const samplePlans = [
-  { title: "Build Waypoint", progress: 12, next: "Define the first working brain-dump flow" },
-  { title: "ARROW ecosystem", progress: 38, next: "Connect Waypoint into the ARROW shell" },
-  { title: "Personal direction", progress: 5, next: "Add the first long-range horizon" }
-];
-
 export function WaypointShell() {
   const [activeTab, setActiveTab] = useState<WaypointTab>("today");
   const [dump, setDump] = useState("");
@@ -81,14 +75,12 @@ export function WaypointShell() {
     const loadShared = () => {
       const sharedTasks = safeJsonList<{ id?: string; text?: string; done?: boolean; createdAt?: number }>(TASKS_KEY)
         .filter((task) => typeof task.id === "string" && typeof task.text === "string");
-      if (sharedTasks.length) {
-        setTodayItems(sharedTasks.map((task) => ({
-          id: task.id!,
-          title: task.text!,
-          meta: "ARROW task",
-          completed: Boolean(task.done),
-        })));
-      }
+      setTodayItems(sharedTasks.map((task) => ({
+        id: task.id!,
+        title: task.text!,
+        meta: "ARROW task",
+        completed: Boolean(task.done),
+      })));
 
       setEvents(
         safeJsonList<SharedEvent>(EVENTS_KEY)
@@ -206,26 +198,24 @@ export function WaypointShell() {
 
   return (
     <main className="waypoint-app">
-      <div className="ambient-grid" />
-      <div className="ambient-glow ambient-glow-a" />
-      <div className="ambient-glow ambient-glow-b" />
-
       <aside className="sidebar">
         <div className="brand-row">
           <div className="brand-mark">
-            <BeaconIcon size={34} active />
+            <BeaconIcon size={29} />
           </div>
           <div>
-            <div className="eyebrow">ARROW</div>
+            <div className="eyebrow">ARROW / WORKSPACE</div>
             <div className="brand-name">Waypoint</div>
           </div>
         </div>
 
-        <nav className="nav">
+        <div className="nav-heading">WORKSPACE</div>
+        <nav className="nav" aria-label="Waypoint sections">
           {tabs.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
               className={`nav-item ${activeTab === id ? "active" : ""}`}
+              aria-current={activeTab === id ? "page" : undefined}
               onClick={() => setActiveTab(id)}
             >
               <Icon width={19} height={19} />
@@ -261,26 +251,24 @@ export function WaypointShell() {
             <span className="orbit-dot" />
             Back to Orbit
           </button>
-          <div className="sidebar-caption">Give your life direction.</div>
+          <div className="sidebar-caption">Part of the ARROW ecosystem</div>
         </div>
       </aside>
 
       <section className="content-shell">
         <header className="topbar">
-          <div>
+          <div className="topbar-heading">
             <div className="eyebrow">{tabEyebrow(activeTab)}</div>
             <h1>{tabTitle(activeTab)}</h1>
           </div>
-
           <div className="topbar-actions">
             <div data-arrow-os-shell data-module="waypoint" suppressHydrationWarning />
-            <button className="icon-button" aria-label="Quick add" onClick={() => setActiveTab("dump")}>
-              <PlusIcon width={18} height={18} />
-            </button>
-            <button className="ravin-chip" onClick={() => setActiveTab("dump")}>
-              <SparkIcon width={16} height={16} />
-              Ask RAVIN
-            </button>
+            {activeTab !== "dump" && (
+              <button className="header-capture-button" type="button" onClick={() => setActiveTab("dump")}>
+                <PlusIcon width={16} height={16} />
+                <span>New capture</span>
+              </button>
+            )}
           </div>
         </header>
 
@@ -309,10 +297,10 @@ export function WaypointShell() {
             />
           )}
 
-          {activeTab === "plans" && <PlansView />}
+          {activeTab === "plans" && <PlansView onCapture={() => setActiveTab("dump")} />}
           {activeTab === "calendar" && <CalendarView events={events} />}
           {activeTab === "direction" && <DirectionView />}
-          {activeTab === "review" && <ReviewView />}
+          {activeTab === "review" && <ReviewView items={todayItems} events={events} />}
         </div>
       </section>
     </main>
@@ -330,109 +318,90 @@ function TodayView({
   progress: number;
   onDump: () => void;
 }) {
+  const completed = items.filter((item) => item.completed).length;
+  const remaining = items.length - completed;
+  const nextItem = items.find((item) => !item.completed);
   return (
-    <div className="page-grid today-grid">
-      <section className="hero-panel">
-        <div className="hero-copy">
-          <div className="eyebrow">RIGHT NOW</div>
-          <h2>One clear next move.</h2>
-          <p>
-            Waypoint keeps the whole picture nearby without making you stare at all of it at once.
-          </p>
+    <div className="today-layout">
+      <section className="overview-bar" aria-label="Today's overview">
+        <div className="overview-copy">
+          <div className="eyebrow">YOUR DAY, IN FOCUS</div>
+          <h2>One thing at a time.</h2>
+          <p>Keep what matters visible. Everything else can wait its turn.</p>
         </div>
-
-        <div className="progress-orbit">
-          <div className="progress-value">{progress}%</div>
-          <div className="progress-label">today</div>
-          <svg viewBox="0 0 120 120" aria-hidden="true">
-            <circle cx="60" cy="60" r="51" className="progress-track" />
-            <circle
-              cx="60"
-              cy="60"
-              r="51"
-              className="progress-ring"
-              pathLength="100"
-              strokeDasharray={`${progress} ${100 - progress}`}
-            />
-          </svg>
+        <div className="overview-stats">
+          <div className="overview-stat"><strong>{remaining}</strong><span>To do</span></div>
+          <div className="overview-stat"><strong>{completed}</strong><span>Done</span></div>
         </div>
       </section>
 
-      <section className="panel primary-list-panel">
-        <div className="panel-heading">
-          <div>
-            <div className="eyebrow">TODAY</div>
-            <h3>Your moves</h3>
+      <div className="today-workspace">
+        <section className="panel primary-list-panel">
+          <header className="panel-heading">
+            <div>
+              <div className="eyebrow">TODAY / TASKS</div>
+              <h3>Your list</h3>
+            </div>
+            <span className="soft-pill">{items.length ? progress + "% complete" : "Ready when you are"}</span>
+          </header>
+          <div className="task-progress" role="progressbar" aria-label="Tasks completed" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}>
+            <span style={{ width: progress + "%" }} />
           </div>
-          <span className="soft-pill">
-            {items.filter((item) => !item.completed).length} remaining
-          </span>
-        </div>
 
-        <div className="task-list">
-          {items.map((item, index) => (
-            <button
-              className={`task-row ${item.completed ? "done" : ""}`}
-              key={item.id}
-              onClick={() =>
-                setItems((current) =>
-                  current.map((currentItem) =>
+          {items.length ? (
+            <div className="task-list">
+              {items.map((item, index) => (
+                <button
+                  type="button"
+                  aria-pressed={Boolean(item.completed)}
+                  className={"task-row " + (item.completed ? "done" : "")}
+                  key={item.id}
+                  onClick={() => setItems((current) => current.map((currentItem) =>
                     currentItem.id === item.id
                       ? { ...currentItem, completed: !currentItem.completed }
                       : currentItem
-                  )
-                )
-              }
-            >
-              <span className="task-index">
-                {String(index + 1).padStart(2, "0")}
-              </span>
-              <span className="task-check">{item.completed ? "✓" : ""}</span>
-              <span className="task-main">
-                <strong>{item.title}</strong>
-                <small>{item.meta}</small>
-              </span>
-            </button>
-          ))}
-        </div>
-      </section>
+                  ))}
+                >
+                  <span className="task-check" aria-hidden="true">{item.completed ? "✓" : ""}</span>
+                  <span className="task-main">
+                    <strong>{item.title}</strong>
+                    <small>{item.meta}</small>
+                  </span>
+                  <span className="task-index">{String(index + 1).padStart(2, "0")}</span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="list-empty">
+              <span className="empty-indicator"><TodayIcon width={22} height={22} /></span>
+              <h4>Nothing on your list yet.</h4>
+              <p>Capture a thought and turn it into a task. Start with what's on your mind.</p>
+              <button className="text-action" type="button" onClick={onDump}>Open Capture <span aria-hidden="true">↗</span></button>
+            </div>
+          )}
+        </section>
 
-      <button className="panel dump-card" onClick={onDump}>
-        <div className="dump-card-icon">
-          <SparkIcon width={18} height={18} />
-        </div>
-        <div>
-          <div className="eyebrow">BRAIN DUMP</div>
-          <h3>Too much going on?</h3>
-          <p>
-            Throw the mess here. Waypoint + RAVIN will sort it into tasks, notes, plans, and time.
-          </p>
-        </div>
-        <span className="arrow-glyph">↗</span>
-      </button>
+        <aside className="today-aside">
+          <section className="panel focus-panel">
+            <div className="eyebrow">UP NEXT</div>
+            <div className="focus-content">
+              <span className="focus-marker" aria-hidden="true">01</span>
+              <h3>{nextItem?.title ?? "You're all caught up."}</h3>
+              <p>{nextItem ? "The next unchecked task in your list." : "Add something when there's a next move worth making."}</p>
+            </div>
+          </section>
 
-      <section className="panel now-card">
-        <div className="panel-heading">
-          <div>
-            <div className="eyebrow">FOCUS</div>
-            <h3>Current objective</h3>
-          </div>
-        </div>
-
-        <div className="focus-objective">
-          <BeaconIcon size={42} active />
-          <div>
-            <strong>
-              {items.find((item) => !item.completed)?.title ?? "You're clear."}
-            </strong>
-            <p>
-              {items.find((item) => !item.completed)
-                ? "This is the next unresolved item in today's route."
-                : "Nothing else is demanding your attention."}
-            </p>
-          </div>
-        </div>
-      </section>
+          <button type="button" className="panel capture-entry" onClick={onDump}>
+            <span className="capture-entry-icon"><SparkIcon width={18} height={18} /></span>
+            <span className="capture-entry-content">
+              <span className="eyebrow">CAPTURE</span>
+              <strong>Clear your head.</strong>
+              <small>Write it down now. Sort it out afterward.</small>
+            </span>
+            <span className="capture-entry-arrow" aria-hidden="true">↗</span>
+          </button>
+        </aside>
+      </div>
     </div>
   );
 }
@@ -465,14 +434,11 @@ function DumpView({
     <div className="dump-layout">
       <section className="panel dump-input-panel">
         <div className="dump-prompt">
-          <BeaconIcon size={50} active />
+          <div className="dump-prompt-mark"><BeaconIcon size={26} /></div>
           <div>
-            <div className="eyebrow">NO ORGANIZING REQUIRED</div>
-            <h2>What's going on?</h2>
-            <p>
-              Say everything. Homework, ideas, things you're worried you'll forget, stuff you want
-              to build, dates, goals — messy is fine.
-            </p>
+            <div className="eyebrow">CAPTURE / INBOX</div>
+            <h2>Get it out of your head.</h2>
+            <p>Tasks, ideas, reminders, unfinished thoughts. Write freely, then review what can become an action.</p>
           </div>
         </div>
 
@@ -495,7 +461,7 @@ function DumpView({
           <span>
             {dump.length
               ? `${dump.split(/\s+/).filter(Boolean).length} words`
-              : "Your brain, unfiltered."}
+              : "A blank space to think."}
           </span>
           <button
             className="primary-button"
@@ -503,7 +469,7 @@ function DumpView({
             onClick={processDump}
           >
             <SparkIcon width={17} height={17} />
-            Make sense of this
+            Organize capture
           </button>
         </div>
       </section>
@@ -512,8 +478,8 @@ function DumpView({
         <section className="panel capture-panel">
           <div className="panel-heading">
             <div>
-              <div className="eyebrow">CAPTURE INTERPRETATION · PREVIEW</div>
-              <h3>{captures.length} things worth sorting.</h3>
+              <div className="eyebrow">CAPTURE / LOCAL PREVIEW</div>
+              <h3>Review your items</h3>
             </div>
             <span className="soft-pill">{acceptedCount} selected</span>
           </div>
@@ -533,6 +499,7 @@ function DumpView({
               <button
                 key={item.id}
                 className={`capture-row ${item.accepted ? "selected" : ""}`}
+                aria-pressed={Boolean(item.accepted)}
                 style={{ animationDelay: `${index * 65}ms` }}
                 onClick={() => toggleCapture(item.id)}
               >
@@ -550,13 +517,13 @@ function DumpView({
           </div>
 
           <div className="capture-footer">
-            <span>Nothing changes until you approve it.</span>
+            <span>Nothing is added until you approve your selection.</span>
             <button
               className="primary-button"
               onClick={acceptCaptures}
               disabled={!acceptedCount}
             >
-              Add selected
+              Add {acceptedCount} selected
             </button>
           </div>
         </section>
@@ -565,36 +532,30 @@ function DumpView({
   );
 }
 
-function PlansView() {
+function PlansView({ onCapture }: { onCapture: () => void }) {
   return (
-    <div className="stack">
-      <section className="section-intro">
-        <div className="eyebrow">OUTCOMES → ROUTES → MOVES</div>
-        <h2>Plans turn direction into something you can actually do.</h2>
-      </section>
-
-      <div className="plan-grid">
-        {samplePlans.map((plan) => (
-          <article className="panel plan-card" key={plan.title}>
-            <div className="plan-top">
-              <BeaconIcon size={28} />
-              <span>{plan.progress}%</span>
-            </div>
-            <h3>{plan.title}</h3>
-            <div className="mini-progress">
-              <span style={{ width: `${plan.progress}%` }} />
-            </div>
-            <div className="next-step">
-              <small>NEXT MOVE</small>
-              <strong>{plan.next}</strong>
-            </div>
-          </article>
-        ))}
-
-        <button className="panel new-plan-card">
-          <PlusIcon width={22} height={22} />
-          <span>New plan</span>
-        </button>
+    <div className="workspace-page">
+      <div className="section-intro">
+        <div className="eyebrow">PLANS / WORK IN PROGRESS</div>
+        <h2>Give your ideas a direction.</h2>
+        <p>A place for projects, milestones, and the small steps that move them forward.</p>
+      </div>
+      <div className="plans-layout">
+        <section className="panel plans-empty">
+          <span className="empty-indicator"><PlansIcon width={23} height={23} /></span>
+          <h3>Your plans will live here.</h3>
+          <p>Plan management isn't connected yet. For now, capture project ideas and review how they're classified.</p>
+          <button type="button" className="secondary-button" onClick={onCapture}>
+            <PlusIcon width={16} height={16} /> Capture a project
+          </button>
+        </section>
+        <aside className="panel plans-guide">
+          <div className="eyebrow">THE APPROACH</div>
+          <h3>From intention to action</h3>
+          <div className="guide-step"><span>01</span><div><strong>Capture</strong><p>Get the idea out of your head.</p></div></div>
+          <div className="guide-step"><span>02</span><div><strong>Clarify</strong><p>Decide what matters and what doesn't.</p></div></div>
+          <div className="guide-step"><span>03</span><div><strong>Move</strong><p>Break it into realistic next steps.</p></div></div>
+        </aside>
       </div>
     </div>
   );
@@ -604,46 +565,54 @@ function CalendarView({ events }: { events: SharedEvent[] }) {
   const today = new Date();
   today.setHours(12, 0, 0, 0);
   const start = new Date(today);
-  start.setDate(today.getDate() - today.getDay() + 1);
+  start.setDate(today.getDate() - ((today.getDay() + 6) % 7));
+  const localDate = (date: Date) =>
+    [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
 
   const days = Array.from({ length: 7 }, (_, index) => {
     const date = new Date(start);
     date.setDate(start.getDate() + index);
-    const iso = date.toISOString().slice(0, 10);
+    const iso = localDate(date);
     return {
       iso,
-      label: date.toLocaleDateString([], { weekday: "short", day: "numeric" }).toUpperCase(),
-      isToday: iso === today.toISOString().slice(0, 10),
+      day: date.toLocaleDateString("en-US", { weekday: "short" }),
+      number: date.getDate(),
+      isToday: iso === localDate(today),
       events: events
         .filter((event) => event.date === iso)
         .sort((a, b) => (a.time || "").localeCompare(b.time || "")),
     };
   });
-
+  const weekLabel = start.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
   return (
-    <div className="stack">
-      <section className="section-intro">
-        <div className="eyebrow">TIME</div>
-        <h2>Your plans need somewhere to live.</h2>
-      </section>
-
+    <div className="workspace-page">
+      <div className="section-intro">
+        <div className="eyebrow">CALENDAR / THIS WEEK</div>
+        <h2>See what's ahead.</h2>
+        <p>Your approved events show up in this weekly view.</p>
+      </div>
       <section className="panel week-panel">
-        <div className="week-row">
-          {days.map((day) => (
-            <div
-              className={`day-column ${day.isToday ? "today-column" : ""}`}
-              key={day.iso}
-            >
-              <div className="day-name">{day.label}</div>
-              {day.events.length ? day.events.map((event) => (
-                <div className="time-block visible" key={event.id}>
-                  {event.time ? `${event.time} · ` : ""}{event.title}
+        <div className="panel-heading week-heading">
+          <div><div className="eyebrow">MONDAY – SUNDAY</div><h3>Week of {weekLabel}</h3></div>
+          <span className="soft-pill">{events.length} events saved</span>
+        </div>
+        <div className="week-scroll">
+          <div className="week-row">
+            {days.map((day) => (
+              <div className={"day-column " + (day.isToday ? "today-column" : "")} key={day.iso}>
+                <div className="day-name"><span>{day.day}</span><strong>{day.number}</strong></div>
+                <div className="day-events">
+                  {day.events.map((event) => (
+                    <div className="time-block visible" key={event.id}>
+                      {event.time && <span className="event-time">{event.time}</span>}
+                      <strong>{event.title}</strong>
+                    </div>
+                  ))}
+                  {!day.events.length && <div className="day-empty">No events</div>}
                 </div>
-              )) : (
-                <div className="time-block muted">Clear</div>
-              )}
-            </div>
-          ))}
+              </div>
+            ))}
+          </div>
         </div>
       </section>
     </div>
@@ -651,80 +620,65 @@ function CalendarView({ events }: { events: SharedEvent[] }) {
 }
 
 function DirectionView() {
+  const prompts = [
+    { horizon: "NOW", title: "What needs attention?", detail: "The commitments and decisions closest to you." },
+    { horizon: "NEXT", title: "What are you building toward?", detail: "The projects and capabilities you want to develop." },
+    { horizon: "LATER", title: "What matters long term?", detail: "A bigger direction, without requiring every answer." }
+  ];
   return (
-    <div className="direction-layout">
-      <section className="panel direction-hero">
-        <div className="direction-beacon">
-          <BeaconIcon size={92} active />
-        </div>
-        <div className="eyebrow">YOUR DIRECTION</div>
-        <h2>What are you trying to make your life become?</h2>
-        <p>
-          You don't need the entire answer. Start with a few directions worth moving toward.
-        </p>
-      </section>
-
-      <section className="panel horizons">
-        <div className="panel-heading">
-          <div>
-            <div className="eyebrow">HORIZONS</div>
-            <h3>Near → Far</h3>
+    <div className="workspace-page">
+      <div className="section-intro">
+        <div className="eyebrow">DIRECTION / LONG VIEW</div>
+        <h2>Know what you're moving toward.</h2>
+        <p>Not another to-do list. A place to keep your priorities in perspective.</p>
+      </div>
+      <div className="direction-layout">
+        <section className="panel direction-hero">
+          <div className="direction-symbol"><DirectionIcon width={30} height={30} /></div>
+          <div className="direction-hero-copy">
+            <div className="eyebrow">YOUR DIRECTION</div>
+            <h3>Make space for the bigger picture.</h3>
+            <p>No directions have been saved here yet. Future updates will let you build a personal set of horizons.</p>
           </div>
-        </div>
-
-        {[
-          ["NOW", "Get the important stuff under control"],
-          ["NEAR", "Build things that actually work"],
-          ["NEXT", "Become genuinely capable at engineering"],
-          ["FAR", "Create work and products that matter"]
-        ].map(([range, copy]) => (
-          <div className="horizon-row" key={range}>
-            <span>{range}</span>
-            <strong>{copy}</strong>
-          </div>
-        ))}
-      </section>
+        </section>
+        <section className="panel horizons">
+          <div className="panel-heading"><div><div className="eyebrow">REFLECTION</div><h3>Questions worth keeping</h3></div></div>
+          {prompts.map((prompt) => (
+            <div className="horizon-row" key={prompt.horizon}>
+              <span>{prompt.horizon}</span>
+              <div><strong>{prompt.title}</strong><p>{prompt.detail}</p></div>
+            </div>
+          ))}
+        </section>
+      </div>
     </div>
   );
 }
 
-function ReviewView() {
+function ReviewView({ items, events }: { items: TodayItem[]; events: SharedEvent[] }) {
+  const done = items.filter((item) => item.completed).length;
+  const open = items.length - done;
+  const next = items.find((item) => !item.completed);
   return (
-    <div className="review-grid">
-      <section className="panel metric-card">
-        <span className="metric">12</span>
-        <small>moves completed</small>
-      </section>
-      <section className="panel metric-card">
-        <span className="metric">3</span>
-        <small>plans advanced</small>
-      </section>
-      <section className="panel metric-card">
-        <span className="metric">2</span>
-        <small>things repeatedly postponed</small>
-      </section>
-
-      <section className="panel review-story">
-        <div className="eyebrow">THIS WEEK</div>
-        <h2>What actually happened?</h2>
-        <p>
-          Waypoint should reflect reality, not grade you. Reviews surface where your time went,
-          what moved, what stalled, and what you may want to change.
-        </p>
-
-        <div className="review-line">
-          <span>Most attention</span>
-          <strong>ARROW</strong>
-        </div>
-        <div className="review-line">
-          <span>Lost momentum</span>
-          <strong>Personal projects</strong>
-        </div>
-        <div className="review-line">
-          <span>Worth reconsidering</span>
-          <strong>2 postponed items</strong>
-        </div>
-      </section>
+    <div className="workspace-page">
+      <div className="section-intro">
+        <div className="eyebrow">REVIEW / CURRENT SNAPSHOT</div>
+        <h2>See where things stand.</h2>
+        <p>A simple look at your current tasks and saved events, without made-up metrics.</p>
+      </div>
+      <div className="review-grid">
+        <section className="panel metric-card"><span className="metric">{done}</span><small>completed tasks</small></section>
+        <section className="panel metric-card"><span className="metric">{open}</span><small>tasks remaining</small></section>
+        <section className="panel metric-card"><span className="metric">{events.length}</span><small>events on calendar</small></section>
+        <section className="panel review-story">
+          <div className="eyebrow">AT A GLANCE</div>
+          <h3>Progress, not pressure.</h3>
+          <p>These numbers are based on the current items in your workspace. A historical review will become possible when activity tracking is available.</p>
+          <div className="review-line"><span>Tasks tracked</span><strong>{items.length}</strong></div>
+          <div className="review-line"><span>Completion</span><strong>{items.length ? Math.round((done / items.length) * 100) + "%" : "No tasks yet"}</strong></div>
+          <div className="review-line"><span>Up next</span><strong>{next?.title ?? "Nothing queued"}</strong></div>
+        </section>
+      </div>
     </div>
   );
 }
@@ -732,7 +686,7 @@ function ReviewView() {
 function tabEyebrow(tab: WaypointTab) {
   const map: Record<WaypointTab, string> = {
     today: "WAYPOINT / TODAY",
-    dump: "WAYPOINT / DUMP",
+    dump: "WAYPOINT / CAPTURE",
     plans: "WAYPOINT / PLANS",
     calendar: "WAYPOINT / CALENDAR",
     direction: "WAYPOINT / DIRECTION",
@@ -745,7 +699,7 @@ function tabEyebrow(tab: WaypointTab) {
 function tabTitle(tab: WaypointTab) {
   const map: Record<WaypointTab, string> = {
     today: "Today",
-    dump: "Brain dump",
+    dump: "Capture",
     plans: "Plans",
     calendar: "Calendar",
     direction: "Direction",

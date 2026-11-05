@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import "./capture-orbit.css";
+import "./workspace.css";
 
 export const metadata: Metadata = {
   title: "Waypoint — ARROW",
