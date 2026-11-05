@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { CaptureOrbit, type CapturePhase } from "./capture-orbit";
 import { BeaconIcon } from "./beacon-icon";
 import {
   CalendarIcon,
@@ -119,6 +120,15 @@ export function WaypointShell() {
   const [isApplyingCapture, setIsApplyingCapture] = useState(false);
   const [isInterpreting, setIsInterpreting] = useState(false);
   const [interpretation, setInterpretation] = useState<WaypointInterpretation | null>(null);
+  const [capturePhase, setCapturePhase] = useState<"idle" | CapturePhase>("idle");
+  const [processingText, setProcessingText] = useState("");
+  const gatherTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const releaseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => {
+    if (gatherTimer.current) window.clearTimeout(gatherTimer.current);
+    if (releaseTimer.current) window.clearTimeout(releaseTimer.current);
+  }, []);
 
   async function refreshSharedPlanning() {
     setSyncing(true);
@@ -200,7 +210,14 @@ export function WaypointShell() {
   const progress = todayItems.length ? Math.round((completed / todayItems.length) * 100) : 0;
 
   async function processDump() {
-    if (!dump.trim() || isInterpreting) return;
+    if (!dump.trim() || isInterpreting || capturePhase !== "idle") return;
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    setProcessingText(dump);
+    setCapturePhase("gathering");
+    gatherTimer.current = window.setTimeout(
+      () => setCapturePhase("thinking"),
+      reducedMotion ? 0 : 1140
+    );
     setIsInterpreting(true);
     setInterpretation(null);
     setActiveCaptureId(null);
@@ -256,6 +273,12 @@ export function WaypointShell() {
         setSyncError(saveError instanceof Error ? saveError.message : "Waypoint could not save this Capture history.");
       }
     } finally {
+      if (gatherTimer.current) window.clearTimeout(gatherTimer.current);
+      setCapturePhase("releasing");
+      releaseTimer.current = window.setTimeout(
+        () => setCapturePhase("idle"),
+        reducedMotion ? 0 : 580
+      );
       setIsInterpreting(false);
     }
   }
@@ -382,26 +405,25 @@ export function WaypointShell() {
 
   return (
     <main className="waypoint-app">
-      <div className="ambient-grid" />
-      <div className="ambient-glow ambient-glow-a" />
-      <div className="ambient-glow ambient-glow-b" />
-
-      <aside className="sidebar">
+ambient      <aside className="sidebar">
         <div className="brand-row">
           <div className="brand-mark">
-            <BeaconIcon size={34} active />
+            <BeaconIcon size={29} />
           </div>
           <div>
-            <div className="eyebrow">ARROW</div>
+            <div className="eyebrow">ARROW / WORKSPACE</div>
             <div className="brand-name">Waypoint</div>
           </div>
         </div>
 
-        <nav className="nav">
+        <div className="nav-heading">WORKSPACE</div>
+        <nav className="nav" aria-label="Waypoint sections">
           {tabs.map(({ id, label, icon: Icon }) => (
             <button
               key={id}
               className={`nav-item ${activeTab === id ? "active" : ""}`}
+              aria-current={activeTab === id ? "page" : undefined}
+              title={label}
               onClick={() => setActiveTab(id)}
             >
               <Icon width={19} height={19} />
@@ -437,7 +459,7 @@ export function WaypointShell() {
             <span className="orbit-dot" />
             Back to Orbit
           </button>
-          <div className="sidebar-caption">Give your life direction.</div>
+          <div className="sidebar-caption">Part of the ARROW ecosystem</div>
         </div>
       </aside>
 
@@ -450,9 +472,12 @@ export function WaypointShell() {
 
           <div className="topbar-actions">
             <div data-arrow-os-shell data-module="waypoint" suppressHydrationWarning />
-            <button className="icon-button" aria-label="Quick add" onClick={() => setActiveTab("dump")}>
-              <PlusIcon width={18} height={18} />
-            </button>
+            {activeTab !== "dump" && (
+              <button className="header-capture-button" type="button" onClick={() => setActiveTab("dump")}>
+                <PlusIcon width={16} height={16} />
+                <span>New capture</span>
+              </button>
+            )}
             <button className="ravin-chip" onClick={() => openRavinFromWaypoint()}>
               <SparkIcon width={16} height={16} />
               Ask RAVIN
@@ -490,6 +515,8 @@ export function WaypointShell() {
               isInterpreting={isInterpreting}
               isApplying={isApplyingCapture}
               interpretation={interpretation}
+              capturePhase={capturePhase}
+              processingText={processingText}
             />
           )}
 
@@ -539,9 +566,9 @@ function TodayView({
       <section className="hero-panel">
         <div className="hero-copy">
           <div className="eyebrow">RIGHT NOW</div>
-          <h2>One clear next move.</h2>
+          <h2>One thing at a time.</h2>
           <p>
-            Waypoint keeps the whole picture nearby without making you stare at all of it at once.
+            Keep what matters visible. Everything else can wait its turn.
           </p>
         </div>
 
@@ -574,8 +601,17 @@ function TodayView({
         </div>
 
         <div className="task-list">
+          {!items.length && (
+            <div className="waypoint-list-empty">
+              <strong>Nothing on your list yet.</strong>
+              <p>Capture a task or a reminder to start planning your day.</p>
+              <button type="button" className="row-action" onClick={onDump}>Open Capture</button>
+            </div>
+          )}
           {items.map((item, index) => (
             <button
+              type="button"
+              aria-pressed={Boolean(item.completed)}
               className={`task-row ${item.completed ? "done" : ""}`}
               key={item.id}
               onClick={() => void onToggle(item.id, !item.completed)}
@@ -643,7 +679,9 @@ function DumpView({
   acceptedCount,
   isInterpreting,
   isApplying,
-  interpretation
+  interpretation,
+  capturePhase,
+  processingText
 }: {
   dump: string;
   setDump: (value: string) => void;
@@ -655,29 +693,36 @@ function DumpView({
   isInterpreting: boolean;
   isApplying: boolean;
   interpretation: WaypointInterpretation | null;
+  capturePhase: "idle" | CapturePhase;
+  processingText: string;
 }) {
   return (
     <div className="dump-layout">
       <section className="panel dump-input-panel">
         <div className="dump-prompt">
-          <BeaconIcon size={50} active />
+          <div className="dump-prompt-mark"><BeaconIcon size={27} /></div>
           <div>
             <div className="eyebrow">CAPTURE → CLARITY</div>
-            <h2>What’s taking up space in your head?</h2>
+            <h2>Get it out of your head.</h2>
             <p>
-              Don’t organize it first. Give RAVIN the raw version — things to do, decisions,
-              ideas, plans, dates, goals, problems, stuff you’re unsure about. Waypoint will
-              compare it with what you already have and help decide what it means.
+              Write freely. RAVIN will compare your thoughts with your existing tasks, plans, and calendar.
             </p>
           </div>
         </div>
 
-        <textarea
-          value={dump}
-          onChange={(event) => setDump(event.target.value)}
-          placeholder="I’ve got calc tomorrow, I want to finish the Waypoint prototype, I need to figure out when I can work on..."
-          className="brain-textarea"
-        />
+        <div className={`brain-editor ${capturePhase !== "idle" ? "is-processing" : ""}`}>
+          <textarea
+            value={dump}
+            onChange={(event) => setDump(event.target.value)}
+            placeholder="Write whatever's on your mind..."
+            className="brain-textarea"
+            aria-label="Capture your thoughts"
+            disabled={capturePhase !== "idle"}
+          />
+          {capturePhase !== "idle" && (
+            <CaptureOrbit text={processingText} phase={capturePhase} />
+          )}
+        </div>
 
         <div className="dump-actions">
           <span>
@@ -687,7 +732,7 @@ function DumpView({
           </span>
           <button
             className="primary-button"
-            disabled={!dump.trim() || isInterpreting}
+            disabled={!dump.trim() || isInterpreting || capturePhase !== "idle"}
             onClick={processDump}
           >
             <SparkIcon width={17} height={17} />
@@ -804,6 +849,7 @@ function DumpView({
                   <button
                     key={item.id}
                     className={`capture-row ${item.accepted ? "selected" : ""}`}
+                    aria-pressed={Boolean(item.accepted)}
                     onClick={() => toggleCapture(item.id)}
                   >
                     <span className={`type-dot type-${item.type}`} />
@@ -994,11 +1040,11 @@ function CalendarView({ events }: { events: SharedEvent[] }) {
   const days = Array.from({ length: 7 }, (_, index) => {
     const date = new Date(start);
     date.setDate(start.getDate() + index);
-    const iso = date.toISOString().slice(0, 10);
+    const iso = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
     return {
       iso,
       label: date.toLocaleDateString([], { weekday: "short", day: "numeric" }).toUpperCase(),
-      isToday: iso === today.toISOString().slice(0, 10),
+      isToday: iso === localIsoDate(),
       events: events
         .filter((event) => event.date === iso)
         .sort((a, b) => (a.time || "").localeCompare(b.time || "")),
