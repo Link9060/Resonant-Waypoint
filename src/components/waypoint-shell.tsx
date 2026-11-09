@@ -204,12 +204,12 @@ export function WaypointShell() {
             <BeaconIcon size={29} />
           </div>
           <div>
-            <div className="eyebrow">ARROW / WORKSPACE</div>
+            <div className="eyebrow">ARROW / PLANNING</div>
             <div className="brand-name">Waypoint</div>
           </div>
         </div>
 
-        <div className="nav-heading">WORKSPACE</div>
+        <div className="nav-heading">NAVIGATION</div>
         <nav className="nav" aria-label="Waypoint sections">
           {tabs.map(({ id, label, icon: Icon }) => (
             <button
@@ -251,7 +251,7 @@ export function WaypointShell() {
             <span className="orbit-dot" />
             Back to Orbit
           </button>
-          <div className="sidebar-caption">Part of the ARROW ecosystem</div>
+          <div className="sidebar-caption">Your planning workspace</div>
         </div>
       </aside>
 
@@ -299,7 +299,7 @@ export function WaypointShell() {
 
           {activeTab === "plans" && <PlansView onCapture={() => setActiveTab("dump")} />}
           {activeTab === "calendar" && <CalendarView events={events} />}
-          {activeTab === "direction" && <DirectionView />}
+          {activeTab === "direction" && <DirectionView onCapture={() => setActiveTab("dump")} />}
           {activeTab === "review" && <ReviewView items={todayItems} events={events} />}
         </div>
       </section>
@@ -325,9 +325,9 @@ function TodayView({
     <div className="today-layout">
       <section className="overview-bar" aria-label="Today's overview">
         <div className="overview-copy">
-          <div className="eyebrow">YOUR DAY, IN FOCUS</div>
-          <h2>One thing at a time.</h2>
-          <p>Keep what matters visible. Everything else can wait its turn.</p>
+          <div className="eyebrow">TODAY'S OVERVIEW</div>
+          <h2>Today at a glance</h2>
+          <p>Review your priorities and keep moving.</p>
         </div>
         <div className="overview-stats">
           <div className="overview-stat"><strong>{remaining}</strong><span>To do</span></div>
@@ -339,8 +339,8 @@ function TodayView({
         <section className="panel primary-list-panel">
           <header className="panel-heading">
             <div>
-              <div className="eyebrow">TODAY / TASKS</div>
-              <h3>Your list</h3>
+              <div className="eyebrow">TASKS</div>
+              <h3>Today's tasks</h3>
             </div>
             <span className="soft-pill">{items.length ? progress + "% complete" : "Ready when you are"}</span>
           </header>
@@ -385,18 +385,18 @@ function TodayView({
           <section className="panel focus-panel">
             <div className="eyebrow">UP NEXT</div>
             <div className="focus-content">
-              <span className="focus-marker" aria-hidden="true">01</span>
+              <span className="focus-marker" aria-hidden="true">NEXT</span>
               <h3>{nextItem?.title ?? "You're all caught up."}</h3>
-              <p>{nextItem ? "The next unchecked task in your list." : "Add something when there's a next move worth making."}</p>
+              <p>{nextItem ? "Next incomplete task" : "Add a task from Capture when you're ready."}</p>
             </div>
           </section>
 
           <button type="button" className="panel capture-entry" onClick={onDump}>
             <span className="capture-entry-icon"><SparkIcon width={18} height={18} /></span>
             <span className="capture-entry-content">
-              <span className="eyebrow">CAPTURE</span>
-              <strong>Clear your head.</strong>
-              <small>Write it down now. Sort it out afterward.</small>
+              <span className="eyebrow">QUICK ACTION</span>
+              <strong>Quick capture</strong>
+              <small>Turn notes into actions.</small>
             </span>
             <span className="capture-entry-arrow" aria-hidden="true">↗</span>
           </button>
@@ -436,9 +436,9 @@ function DumpView({
         <div className="dump-prompt">
           <div className="dump-prompt-mark"><BeaconIcon size={26} /></div>
           <div>
-            <div className="eyebrow">CAPTURE / INBOX</div>
-            <h2>Get it out of your head.</h2>
-            <p>Tasks, ideas, reminders, unfinished thoughts. Write freely, then review what can become an action.</p>
+            <div className="eyebrow">INBOX</div>
+            <h2>Capture and organize</h2>
+            <p>Add notes, tasks, or ideas. Review the suggested items before saving anything.</p>
           </div>
         </div>
 
@@ -478,7 +478,7 @@ function DumpView({
         <section className="panel capture-panel">
           <div className="panel-heading">
             <div>
-              <div className="eyebrow">CAPTURE / LOCAL PREVIEW</div>
+              <div className="eyebrow">REVIEW / NOT YET SAVED</div>
               <h3>Review your items</h3>
             </div>
             <span className="soft-pill">{acceptedCount} selected</span>
@@ -487,7 +487,7 @@ function DumpView({
           {firstMove && (
             <div className="capture-guidance">
               <div>
-                <div className="eyebrow">SUGGESTED FIRST MOVE</div>
+                <div className="eyebrow">SUGGESTED NEXT ACTION</div>
                 <strong>{firstMove.title}</strong>
               </div>
               <p>Review the steps below. Only the items you approve will be added.</p>
@@ -544,18 +544,12 @@ function PlansView({ onCapture }: { onCapture: () => void }) {
         <section className="panel plans-empty">
           <span className="empty-indicator"><PlansIcon width={23} height={23} /></span>
           <h3>Your plans will live here.</h3>
-          <p>Plan management isn't connected yet. For now, capture project ideas and review how they're classified.</p>
+          <p>Plan management isn't connected yet. You can capture a project idea and review the suggested next steps.</p>
           <button type="button" className="secondary-button" onClick={onCapture}>
             <PlusIcon width={16} height={16} /> Capture a project
           </button>
         </section>
-        <aside className="panel plans-guide">
-          <div className="eyebrow">THE APPROACH</div>
-          <h3>From intention to action</h3>
-          <div className="guide-step"><span>01</span><div><strong>Capture</strong><p>Get the idea out of your head.</p></div></div>
-          <div className="guide-step"><span>02</span><div><strong>Clarify</strong><p>Decide what matters and what doesn't.</p></div></div>
-          <div className="guide-step"><span>03</span><div><strong>Move</strong><p>Break it into realistic next steps.</p></div></div>
-        </aside>
+
       </div>
     </div>
   );
@@ -619,7 +613,7 @@ function CalendarView({ events }: { events: SharedEvent[] }) {
   );
 }
 
-function DirectionView() {
+function DirectionView({ onCapture }: { onCapture: () => void }) {
   const prompts = [
     { horizon: "NOW", title: "What needs attention?", detail: "The commitments and decisions closest to you." },
     { horizon: "NEXT", title: "What are you building toward?", detail: "The projects and capabilities you want to develop." },
@@ -638,7 +632,8 @@ function DirectionView() {
           <div className="direction-hero-copy">
             <div className="eyebrow">YOUR DIRECTION</div>
             <h3>Make space for the bigger picture.</h3>
-            <p>No directions have been saved here yet. Future updates will let you build a personal set of horizons.</p>
+            <p>Direction planning is not connected yet. Capture a priority or idea now, then organize it when this workspace is ready.</p>
+            <button type="button" className="secondary-button" onClick={onCapture}><PlusIcon width={16} height={16} /> Capture an idea</button>
           </div>
         </section>
         <section className="panel horizons">
