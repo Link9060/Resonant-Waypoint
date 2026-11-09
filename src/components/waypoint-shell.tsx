@@ -299,7 +299,7 @@ export function WaypointShell() {
 
           {activeTab === "plans" && <PlansView onCapture={() => setActiveTab("dump")} />}
           {activeTab === "calendar" && <CalendarView events={events} />}
-          {activeTab === "direction" && <DirectionView />}
+          {activeTab === "direction" && <DirectionView onCapture={() => setActiveTab("dump")} />}
           {activeTab === "review" && <ReviewView items={todayItems} events={events} />}
         </div>
       </section>
@@ -544,18 +544,12 @@ function PlansView({ onCapture }: { onCapture: () => void }) {
         <section className="panel plans-empty">
           <span className="empty-indicator"><PlansIcon width={23} height={23} /></span>
           <h3>Your plans will live here.</h3>
-          <p>Plan management isn't connected yet. For now, capture project ideas and review how they're classified.</p>
+          <p>Plan management isn't connected yet. You can capture a project idea and review the suggested next steps.</p>
           <button type="button" className="secondary-button" onClick={onCapture}>
             <PlusIcon width={16} height={16} /> Capture a project
           </button>
         </section>
-        <aside className="panel plans-guide">
-          <div className="eyebrow">THE APPROACH</div>
-          <h3>From intention to action</h3>
-          <div className="guide-step"><span>01</span><div><strong>Capture</strong><p>Get the idea out of your head.</p></div></div>
-          <div className="guide-step"><span>02</span><div><strong>Clarify</strong><p>Decide what matters and what doesn't.</p></div></div>
-          <div className="guide-step"><span>03</span><div><strong>Move</strong><p>Break it into realistic next steps.</p></div></div>
-        </aside>
+
       </div>
     </div>
   );
@@ -619,7 +613,7 @@ function CalendarView({ events }: { events: SharedEvent[] }) {
   );
 }
 
-function DirectionView() {
+function DirectionView({ onCapture }: { onCapture: () => void }) {
   const prompts = [
     { horizon: "NOW", title: "What needs attention?", detail: "The commitments and decisions closest to you." },
     { horizon: "NEXT", title: "What are you building toward?", detail: "The projects and capabilities you want to develop." },
@@ -638,7 +632,8 @@ function DirectionView() {
           <div className="direction-hero-copy">
             <div className="eyebrow">YOUR DIRECTION</div>
             <h3>Make space for the bigger picture.</h3>
-            <p>No directions have been saved here yet. Future updates will let you build a personal set of horizons.</p>
+            <p>Direction planning is not connected yet. Capture a priority or idea now, then organize it when this workspace is ready.</p>
+            <button type="button" className="secondary-button" onClick={onCapture}><PlusIcon width={16} height={16} /> Capture an idea</button>
           </div>
         </section>
         <section className="panel horizons">
