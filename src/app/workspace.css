@@ -1095,3 +1095,106 @@ html[data-arrow-identity="pulse"][data-arrow-theme="light"] {
 html[data-arrow-identity="pulse"] .waypoint-app .nav-item.active {
   border-color: var(--wp-line);
 }
+
+
+/* 2026-11 editorial refinement: restrained, consistent ARROW workspace. */
+.waypoint-app {
+  --wp-panel-radius:12px;
+  --wp-radius:10px;
+  grid-template-columns:220px minmax(0,1fr);
+  font-size:14px;
+}
+.waypoint-app .sidebar { padding-top:18px; padding-bottom:16px; }
+.waypoint-app .brand-row { margin-bottom:26px; }
+.waypoint-app .brand-mark { width:34px; height:34px; flex-basis:34px; border-radius:9px; }
+.waypoint-app .nav { gap:2px; }
+.waypoint-app .nav-item {
+  height:40px;
+  border-radius:8px;
+  font-size:13px;
+  transition:background-color .12s ease,color .12s ease;
+}
+.waypoint-app .nav-item.active {
+  background:var(--wp-surface-raised);
+  border-color:var(--wp-line);
+  box-shadow:inset 2px 0 0 var(--wp-ink);
+}
+.waypoint-app .sidebar-caption { opacity:.8; }
+.waypoint-app .topbar {
+  min-height:76px;
+  padding-block:15px;
+}
+.waypoint-app .topbar h1 {
+  font-size:23px;
+  letter-spacing:-.03em;
+  font-weight:630;
+}
+.waypoint-app .content { max-width:1160px; padding-top:28px; }
+.waypoint-app .eyebrow { font-size:10px; letter-spacing:.065em; }
+.waypoint-app .panel,
+.waypoint-app .hero-panel { border-radius:var(--wp-panel-radius); }
+.waypoint-app :is(.panel-heading h3,.plans-guide h3,.review-story h3,.horizons h3) {
+  font-size:16px;
+  line-height:1.3;
+}
+.waypoint-app .overview-bar {
+  min-height:0;
+  padding:24px clamp(20px,3vw,34px);
+  background:var(--wp-surface) !important;
+  border:1px solid var(--wp-line);
+  border-radius:var(--wp-panel-radius);
+  box-shadow:none;
+}
+.waypoint-app .overview-copy h2 {
+  font-size:clamp(22px,2.6vw,32px);
+  font-weight:630;
+  letter-spacing:-.035em;
+  line-height:1.15;
+}
+.waypoint-app .overview-copy p { max-width:48ch; font-size:13px; color:var(--wp-ink-muted); }
+.waypoint-app .overview-stat strong { font-size:27px; line-height:1; }
+.waypoint-app .today-layout { gap:16px; }
+.waypoint-app .today-workspace { gap:16px; }
+.waypoint-app .primary-list-panel { min-height:300px; }
+.waypoint-app .today-aside { gap:16px; }
+.waypoint-app .focus-panel { min-height:150px; }
+.waypoint-app .focus-content { padding-top:17px; }
+.waypoint-app .focus-marker { color:var(--wp-ink-faint); font-size:10px; font-weight:600; letter-spacing:.08em; }
+.waypoint-app .focus-content h3 { font-size:17px; letter-spacing:-.02em; }
+.waypoint-app .capture-entry {
+  min-height:112px;
+  padding:20px 22px;
+  align-items:center;
+  box-shadow:none;
+}
+.waypoint-app .capture-entry-icon { width:34px; height:34px; flex-basis:34px; border-radius:10px; }
+.waypoint-app .capture-entry-content strong { font-size:14px; }
+.waypoint-app .dump-layout { gap:15px; max-width:1000px; }
+.waypoint-app .dump-input-panel { padding:26px 28px; }
+.waypoint-app .dump-prompt h2 { font-size:clamp(21px,3vw,28px); letter-spacing:-.03em; }
+.waypoint-app .dump-prompt p { max-width:58ch; }
+.waypoint-app .brain-editor .brain-textarea { border:1px solid var(--wp-line); border-radius:10px; background:var(--wp-surface-raised); color:var(--wp-ink); }
+.waypoint-app .brain-editor .brain-textarea::placeholder { color:var(--wp-ink-faint); }
+.waypoint-app .capture-guidance { border-radius:10px; }
+.waypoint-app .capture-row { transition:border-color .12s ease,background-color .12s ease; }
+.waypoint-app .nav-item:focus-visible,
+.waypoint-app .header-capture-button:focus-visible,
+.waypoint-app .brain-textarea:focus-visible,
+.waypoint-app .primary-button:focus-visible { outline:2px solid var(--wp-ink);outline-offset:2px; }
+html[data-arrow-identity="bloom"] .waypoint-app { --wp-panel-radius:14px; --wp-radius:11px; }
+html[data-arrow-identity="atelier"] .waypoint-app { --wp-panel-radius:2px; --wp-radius:2px; }
+html[data-arrow-identity="pulse"] .waypoint-app { --wp-panel-radius:9px; --wp-radius:8px; }
+@media(max-width:960px) {
+  .waypoint-app { grid-template-columns:190px minmax(0,1fr); }
+  .waypoint-app .content { padding-inline:22px; }
+}
+@media(max-width:700px) {
+  .waypoint-app { display:flex; flex-direction:column; }
+  .waypoint-app .sidebar { width:100%; }
+  .waypoint-app .topbar { min-height:70px; }
+  .waypoint-app .content { padding:20px 16px 36px; }
+  .waypoint-app .overview-bar { padding:21px; }
+  .waypoint-app .capture-entry { min-height:100px; }
+  .waypoint-app .dump-input-panel { padding:22px 20px; }
+  .waypoint-app .brain-editor .brain-textarea { min-height:170px; }
+}
