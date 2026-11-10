@@ -24,12 +24,6 @@ jobs:
           node-version: 22
           cache: npm
 
-      # Temporary, review-only security remediation: generate the exact
-      # new npm lockfile on a trusted runner, then commit it to this PR.
-      - name: Prepare and print Next.js patched lockfile for review
-        run: |
-          npm install next@16.4.6 --save-exact --package-lock-only --ignore-scripts --no-audit --no-fund
-          node -e "require('fs').readFileSync('package-lock.json','utf8').split('\\n').forEach((line,i)=>console.log('ARROWLOCK:'+i+':'+line))"
       - name: Install locked dependencies
         run: npm ci
 
