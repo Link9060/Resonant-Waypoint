@@ -1049,3 +1049,84 @@ button { color: inherit; }
   --panel-2:color-mix(in srgb,var(--arrow-adapt-primary,#7187a4) 15%,#2b3037);
   --line:color-mix(in srgb,var(--arrow-adapt-primary,#7187a4) 22%,#3a424b);
 }
+
+
+/* Integrated ARROW Beta: editorial Waypoint foundation.
+   Focus on real task content, legibility, clear selection and a stable grid. */
+.waypoint-app { --radius:14px; }
+.waypoint-app .ambient-grid { opacity:.08; }
+.waypoint-app .ambient-glow { opacity:.025; filter:blur(90px); }
+.waypoint-app .content { max-width:1160px; padding:24px clamp(18px,3vw,36px) 60px; }
+.waypoint-app .topbar { height:78px; padding:14px clamp(18px,3vw,36px); align-items:center; }
+.waypoint-app .topbar h1 { font-size:clamp(21px,2.5vw,26px); line-height:1.2; }
+.waypoint-app .sidebar { padding:20px 14px 16px; }
+.waypoint-app .brand-row { padding:4px 8px 22px; }
+.waypoint-app .nav-item { min-height:44px; border-radius:10px; font-size:13px; }
+.waypoint-app .nav-item.active { color:var(--text); box-shadow:inset 0 0 0 1px var(--line-strong); }
+.waypoint-app .page-grid { gap:12px; }
+.waypoint-app .today-grid { grid-template-columns:minmax(0,1.4fr) minmax(290px,.85fr); }
+.waypoint-app :is(.panel,.hero-panel,.planning-editor) {
+  min-width:0; border-color:var(--line-strong); border-radius:var(--radius,14px);
+  background:var(--panel); box-shadow:0 3px 14px #0000000b;
+}
+.waypoint-app .hero-panel { min-height:170px; padding:26px clamp(22px,3vw,34px); }
+.waypoint-app .hero-panel::after { opacity:.18; }
+.waypoint-app :is(.hero-copy,.section-intro,.dump-prompt,.direction-hero,.review-story) h2 {
+  font-size:clamp(26px,3vw,37px); line-height:1.13; letter-spacing:-.04em;
+  font-weight:570; text-wrap:balance;
+}
+.waypoint-app .section-intro { margin-bottom:20px; }
+.waypoint-app .section-intro p { max-width:58ch; }
+.waypoint-app :is(.primary-list-panel,.dump-input-panel,.capture-panel,.now-card) { padding:clamp(18px,2.5vw,27px); }
+.waypoint-app .task-row.done { opacity:.68; }
+.waypoint-app :is(.task-main small,.nav-badge,.soft-pill,.eyebrow) { overflow-wrap:anywhere; }
+.waypoint-app :is(.task-row,.capture-row,.plan-card,.day-column) { min-width:0; }
+.waypoint-app :is(input,select,textarea) { min-width:0; max-width:100%; }
+.waypoint-app :is(button,input,select,textarea,summary):focus-visible {
+  outline:2px solid var(--arrow-accent-color,var(--text)); outline-offset:3px;
+}
+:root[data-arrow-theme="light"] .waypoint-app {
+  --text:#19222d; --muted:#516071; --faint:#647185;
+  --line:#d3dce6; --line-strong:#c2cdd9;
+}
+:root[data-arrow-theme="dark"] .waypoint-app {
+  --text:#f1f3f6; --muted:#b3bfca; --faint:#8896a8;
+  --line:#39414b; --line-strong:#505b68;
+}
+:root[data-arrow-adapt="atelier"] .waypoint-app :is(.panel,.hero-panel,.planning-editor) {
+  border-radius:2px!important;
+  background:var(--panel)!important; box-shadow:none!important;
+}
+:root[data-arrow-adapt="atelier"] .waypoint-app :is(.task-row,.capture-row) { min-width:0; }
+:root[data-arrow-adapt="bloom"] .waypoint-app .ambient-glow { display:none; }
+:root[data-arrow-adapt="bloom"] .waypoint-app .panel { box-shadow:0 3px 12px #00000012!important; }
+@media(min-width:1100px) {
+  :root[data-arrow-adapt="atelier"] .waypoint-app .content-shell {
+    height:calc(100dvh - 80px); min-height:0; overflow-y:auto;
+  }
+  :root[data-arrow-adapt="atelier"] .waypoint-app .sidebar {
+    flex-wrap:nowrap; max-width:100vw; overflow-x:auto;
+  }
+  :root[data-arrow-adapt="atelier"] .waypoint-app .nav { flex:1; min-width:max-content; }
+}
+@media(max-width:980px) {
+  .waypoint-app .today-grid { grid-template-columns:minmax(0,1fr); }
+}
+@media(max-width:680px) {
+  .waypoint-app .content { padding:16px 16px 112px; }
+  .waypoint-app .topbar { height:auto; min-height:72px; padding:12px 16px; }
+  .waypoint-app .hero-panel { min-height:160px; padding:20px; }
+  .waypoint-app .hero-panel::after { display:none; }
+  .waypoint-app .sidebar .nav {
+    display:flex!important; overflow-x:auto; overflow-y:hidden; gap:5px;
+    width:100%; scroll-snap-type:x proximity; scrollbar-width:thin;
+  }
+  .waypoint-app .sidebar .nav-item {
+    flex:0 0 76px; min-width:76px; width:76px;
+    min-height:54px; padding:7px 4px; scroll-snap-align:center;
+  }
+  .waypoint-app .sidebar .nav-item span:not(.nav-badge) {
+    font-size:10px!important; overflow:visible; white-space:normal; text-align:center;
+  }
+  .waypoint-app .content-shell { min-width:0; overflow-x:hidden; }
+}
