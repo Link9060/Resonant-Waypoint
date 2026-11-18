@@ -512,7 +512,7 @@ export function WaypointShell() {
             <span className="orbit-dot" />
             Back to Orbit
           </button>
-          <div className="sidebar-caption">Give your life direction.</div>
+          <div className="sidebar-caption">Tasks, plans, and goals in one place.</div>
         </div>
       </aside>
 
@@ -632,10 +632,10 @@ function TodayView({
     <div className="page-grid today-grid">
       <section className="hero-panel">
         <div className="hero-copy">
-          <div className="eyebrow">RIGHT NOW</div>
-          <h2>One clear next move.</h2>
+          <div className="eyebrow">TODAY'S PRIORITY</div>
+          <h2>Focus on what matters next.</h2>
           <p>
-            {daily.next ? daily.next.title : daily.activeEvent ? daily.activeEvent.title : "Your day, with room to adjust."}
+            {daily.next ? daily.next.title : daily.activeEvent ? daily.activeEvent.title : "Your schedule is clear for now."}
           </p>
           <p>{daily.reason}</p>
           <div className="daily-context"><span>{daily.openCount} open across ARROW</span><span>{daily.available} min available before your next event or 10 PM</span>{daily.blockedCount>0 && <span>{daily.blockedCount} waiting on prerequisites</span>}</div>
@@ -663,7 +663,7 @@ function TodayView({
         <div className="panel-heading">
           <div>
             <div className="eyebrow">TODAY</div>
-            <h3>Your moves</h3>
+            <h3>Today's tasks</h3>
           </div>
           <span className="soft-pill">
             {items.filter((item) => !item.completed).length} remaining
@@ -698,9 +698,9 @@ function TodayView({
         </div>
         <div>
           <div className="eyebrow">CAPTURE</div>
-          <h3>Too much in your head?</h3>
+          <h3>Capture a task or idea</h3>
           <p>
-            Put it here as-is. RAVIN will read the whole situation, connect it to what Waypoint already knows, and find a route forward.
+            Add a note, task, idea, or decision. RAVIN can help organize it alongside your existing plans.
           </p>
         </div>
         <span className="arrow-glyph">↗</span>
@@ -710,7 +710,7 @@ function TodayView({
         <div className="panel-heading">
           <div>
             <div className="eyebrow">FOCUS</div>
-            <h3>Current objective</h3>
+            <h3>Up next</h3>
           </div>
         </div>
 
@@ -765,12 +765,12 @@ function DumpView({
         <div className="dump-prompt">
           <BeaconIcon size={50} active />
           <div>
-            <div className="eyebrow">CAPTURE → CLARITY</div>
-            <h2>What’s taking up space in your head?</h2>
+            <div className="eyebrow">CAPTURE & ORGANIZE</div>
+            <h2>Add what you want to remember.</h2>
             <p>
-              Don’t organize it first. Give RAVIN the raw version — things to do, decisions,
-              ideas, plans, dates, goals, problems, stuff you’re unsure about. Waypoint will
-              compare it with what you already have and help decide what it means.
+              Write down tasks, dates, ideas, goals, or questions in any order. RAVIN
+              can suggest how they fit with your existing schedule and plans before
+              you choose what to save.
             </p>
           </div>
         </div>
@@ -780,7 +780,7 @@ function DumpView({
           aria-label="Capture your thoughts" maxLength={16000} readOnly={reviewing}
           disabled={isInterpreting || isApplying}
           onChange={(event) => setDump(event.target.value)}
-          placeholder="I’ve got calc tomorrow, I want to finish the Waypoint prototype, I need to figure out when I can work on..."
+          placeholder="I need to finish a project by Friday, remember an appointment, and make a plan for next week…"
           className="brain-textarea"
         />
 
@@ -788,7 +788,7 @@ function DumpView({
           <span>
             {dump.length
               ? `${dump.split(/\s+/).filter(Boolean).length} words · context-aware`
-              : "Capture first. Organize later."}
+              : "Write freely, then review suggestions."}
           </span>
           <button type="button"
             className="primary-button"
@@ -796,7 +796,7 @@ function DumpView({
             onClick={processDump}
           >
             <SparkIcon width={17} height={17} />
-            {isInterpreting ? "RAVIN is reasoning…" : "Find my direction"}
+            {isInterpreting ? "RAVIN is reasoning…" : "Organize with RAVIN"}
           </button>
         </div>
       </section>
@@ -818,9 +818,9 @@ function DumpView({
             </article>
 
             <article className="panel reasoning-card reasoning-next">
-              <div className="eyebrow">CLEAREST NEXT MOVE</div>
+              <div className="eyebrow">SUGGESTED NEXT STEP</div>
               <div className="next-move-mark"><BeaconIcon size={36} active /></div>
-              <h3>{interpretation.next_move || "Review the route below."}</h3>
+              <h3>{interpretation.next_move || "Review the suggestions below."}</h3>
               <p>One move first. The rest can stay visible without competing for attention.</p>
             </article>
           </section>
@@ -829,7 +829,7 @@ function DumpView({
             <section className="panel reasoning-section">
               <div className="panel-heading">
                 <div>
-                  <div className="eyebrow">WHAT RAVIN NOTICED</div>
+                  <div className="eyebrow">SUMMARY</div>
                   <h3>Signals in the situation</h3>
                 </div>
                 <span className="soft-pill">{interpretation.signals.length}</span>
@@ -851,7 +851,7 @@ function DumpView({
             <section className="panel reasoning-section">
               <div className="panel-heading">
                 <div>
-                  <div className="eyebrow">RECOMMENDED ROUTE</div>
+                  <div className="eyebrow">RECOMMENDED STEPS</div>
                   <h3>How I’d move through this</h3>
                 </div>
               </div>
@@ -876,7 +876,7 @@ function DumpView({
               <div className="panel-heading">
                 <div>
                   <div className="eyebrow">UNRESOLVED</div>
-                  <h3>Answers that could change the route</h3>
+                  <h3>Questions to clarify your plan</h3>
                 </div>
               </div>
               <div className="question-list">
@@ -981,8 +981,8 @@ function PlansView({
   return (
     <div className="stack">
       <section className="section-intro">
-        <div className="eyebrow">OUTCOMES → ROUTES → MOVES</div>
-        <h2>Plans turn direction into something you can actually do.</h2>
+        <div className="eyebrow">PROJECTS & NEXT STEPS</div>
+        <h2>Keep your projects and next steps organized.</h2>
       </section>
 
       <div className="plan-grid">
@@ -994,7 +994,7 @@ function PlansView({
             </div>
             <h3>{plan.title}</h3>
             <div className="next-step">
-              <small>NEXT MOVE</small>
+              <small>NEXT STEP</small>
               <strong>{plan.context || "Choose the first concrete action."}</strong>
             </div>
             <button className="row-action" type="button" onClick={() => void onArchive(plan)}>
@@ -1012,7 +1012,7 @@ function PlansView({
             <h3>No active plans yet.</h3>
             <div className="next-step">
               <small>START HERE</small>
-              <strong>Capture a project or goal and RAVIN will pull out the route.</strong>
+              <strong>Use Capture to add a project, or create a new plan.</strong>
             </div>
           </article>
         ) : null}
@@ -1027,8 +1027,8 @@ function PlansView({
         <section className="panel capture-panel">
           <div className="panel-heading">
             <div>
-              <div className="eyebrow">UPCOMING MOVES</div>
-              <h3>Useful, just not for Today.</h3>
+              <div className="eyebrow">UPCOMING WORK</div>
+              <h3>Tasks scheduled for later</h3>
             </div>
             <span className="soft-pill">{upcoming.length + futureTodos.length}</span>
           </div>
@@ -1162,18 +1162,18 @@ function DirectionView({
         <div className="direction-beacon">
           <BeaconIcon size={92} active />
         </div>
-        <div className="eyebrow">YOUR DIRECTION</div>
-        <h2>What are you trying to make your life become?</h2>
+        <div className="eyebrow">GOALS & PRIORITIES</div>
+        <h2>Work toward your longer-term goals.</h2>
         <p>
-          You don't need the entire answer. Start with a few directions worth moving toward.
+          Keep your important goals visible and add concrete steps as your plans develop.
         </p>
       </section>
 
       <section className="panel horizons">
         <div className="panel-heading">
           <div>
-            <div className="eyebrow">HORIZONS</div>
-            <h3>Directions worth moving toward</h3>
+            <div className="eyebrow">YOUR GOALS</div>
+            <h3>Goals you're tracking</h3>
           </div>
         </div>
 
@@ -1188,7 +1188,7 @@ function DirectionView({
         )) : (
           <div className="horizon-row">
             <span>EMPTY</span>
-            <strong>Capture a goal and RAVIN will place it here.</strong>
+            <strong>Capture a goal to see it here.</strong>
           </div>
         )}
       </section>

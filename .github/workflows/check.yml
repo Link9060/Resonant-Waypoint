@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - enterarrow-domain
+      - beta-foundation-polish-20261023
 
 permissions:
   contents: read
