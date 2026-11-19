@@ -1130,3 +1130,14 @@ button { color: inherit; }
   }
   .waypoint-app .content-shell { min-width:0; overflow-x:hidden; }
 }
+
+/* Waypoint: content-first density without decorative filler. */
+.waypoint-app .content { padding-top:20px; }
+.waypoint-app .hero-panel::after { display:none; }
+.waypoint-app .task-row { grid-template-columns:24px minmax(0,1fr); }
+.waypoint-app .direction-layout { display:block; }
+.waypoint-app .direction-layout .horizons { width:100%; }
+.waypoint-app .horizon-row { display:flex; align-items:center; flex-wrap:wrap; gap:12px; }
+.waypoint-app .horizon-row strong { flex:1; min-width:160px; }
+.waypoint-app .review-story { min-height:0; }
+.waypoint-app .plan-card { min-height:180px; }
