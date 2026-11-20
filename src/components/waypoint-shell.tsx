@@ -528,7 +528,11 @@ export function WaypointShell() {
             <button type="button" className="icon-button" aria-label="Quick add" onClick={() => setActiveTab("dump")}>
               <PlusIcon width={18} height={18} />
             </button>
-            <button type="button" className="ravin-chip" onClick={() => openRavinFromWaypoint()}>
+            <button type="button" className="ravin-chip" onClick={() => {
+              const shell=(window as Window & {ArrowOS?:{openQuickRavin?:(module:string)=>void}}).ArrowOS;
+              if(shell?.openQuickRavin) shell.openQuickRavin('waypoint');
+              else openRavinFromWaypoint();
+            }}>
               <SparkIcon width={16} height={16} />
               Ask RAVIN
             </button>
@@ -614,91 +618,70 @@ export function WaypointShell() {
 }
 
 function TodayView({
-  items,
-  onToggle,
-  progress,
-  onDump, daily, pending, onPlans, onPlan
+  items, onToggle, progress, onDump, daily, pending, onPlans, onPlan
 }: {
   items: TodayItem[];
   onToggle: (id: string, completed: boolean) => void;
   progress: number;
   onDump: () => void;
   daily: ReturnType<typeof buildDailyPlan>;
-  pending:Set<string>;
-  onPlans:()=>void;
-  onPlan:()=>void;
+  pending: Set<string>;
+  onPlans: () => void;
+  onPlan: () => void;
 }) {
+  const [filter,setFilter] = useState<'open' | 'all' | 'done'>('open');
+  const open=items.filter(item=>!item.completed);
+  const completed=items.length-open.length;
+  const visible=[...items].filter(item=>filter==='all'||(filter==='open'?!item.completed:item.completed))
+    .sort((a,b)=>Number(a.completed)-Number(b.completed));
   return (
-    <div className="page-grid today-grid">
-      <section className="hero-panel">
-        <div className="hero-copy">
-          
-          <h2>Next</h2>
-          <p>
-            {daily.next ? daily.next.title : daily.activeEvent ? daily.activeEvent.title : "Your schedule is clear for now."}
-          </p>
-          <p>{daily.reason}</p>
-          <div className="daily-context"><span>{daily.openCount} open across ARROW</span><span>{daily.available} min available before your next event or 10 PM</span>{daily.blockedCount>0 && <span>{daily.blockedCount} waiting on prerequisites</span>}</div>
-          <div className="planning-control-bar"><button type="button" onClick={onPlan}>Preview schedule</button><button type="button" onClick={onPlans}>Plans</button></div>
+    <div className="today-workspace">
+      <div className="today-toolbar">
+        <div className="today-overview">
+          <span><strong>{open.length}</strong> open</span>
+          <span><strong>{daily.available}</strong> min free</span>
+          {daily.blockedCount>0 && <span><strong>{daily.blockedCount}</strong> blocked</span>}
         </div>
-
-        <div className="progress-orbit">
-          <div className="progress-value">{progress}%</div>
-          <div className="progress-label">today</div>
-          <svg viewBox="0 0 120 120" aria-hidden="true">
-            <circle cx="60" cy="60" r="51" className="progress-track" />
-            <circle
-              cx="60"
-              cy="60"
-              r="51"
-              className="progress-ring"
-              pathLength="100"
-              strokeDasharray={`${progress} ${100 - progress}`}
-            />
-          </svg>
+        <div className="today-actions">
+          <button type="button" onClick={onPlan}>Plan week</button>
+          <button type="button" onClick={onPlans}>Plans</button>
+          <button type="button" className="today-new" onClick={onDump}>+ Capture</button>
         </div>
-      </section>
-
-      <section className="panel primary-list-panel">
-        <div className="panel-heading">
+      </div>
+      <section className="panel today-task-sheet" aria-labelledby="waypoint-today-tasks">
+        <div className="today-sheet-header">
           <div>
-            
-            <h3>Tasks</h3>
+            <h2 id="waypoint-today-tasks">Tasks</h2>
+            <span>{completed} of {items.length} complete</span>
           </div>
-          <span className="soft-pill">
-            {items.filter((item) => !item.completed).length} remaining
-          </span>
+          <strong className="today-percent">{progress}%</strong>
         </div>
-
-        <div className="task-list">
-          {!items.length && <p>No tasks today.</p>}
-          {[...items].sort((a,b)=>Number(a.completed)-Number(b.completed)).map((item) => (
+        <div className="today-progress-track" role="progressbar" aria-label="Tasks completed" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}>
+          <span style={{width:progress+'%'}} />
+        </div>
+        <div className="today-filter-tabs" role="group" aria-label="Filter tasks">
+          <button type="button" aria-pressed={filter==='open'} onClick={()=>setFilter('open')}>Open <span>{open.length}</span></button>
+          <button type="button" aria-pressed={filter==='all'} onClick={()=>setFilter('all')}>All <span>{items.length}</span></button>
+          <button type="button" aria-pressed={filter==='done'} onClick={()=>setFilter('done')}>Done <span>{completed}</span></button>
+        </div>
+        <div className="task-list today-task-list">
+          {!visible.length && <div className="today-empty">{filter==='done'?'No completed tasks':filter==='open'?'No open tasks':'No tasks today'}</div>}
+          {visible.map(item=>(
             <button type="button"
-              id={`item-${item.id}`}
-              className={`task-row ${item.completed ? "done" : ""}`}
-              key={item.id} disabled={pending.has(item.id)} aria-pressed={Boolean(item.completed)} aria-label={`${item.completed?'Reopen':'Complete'} ${item.title}`}
-              onClick={() => void onToggle(item.id, !item.completed)}
+              id={'item-'+item.id}
+              className={'task-row'+(item.completed?' done':'')}
+              key={item.id} disabled={pending.has(item.id)}
+              aria-pressed={Boolean(item.completed)}
+              aria-label={(item.completed?'Reopen ':'Complete ')+item.title}
+              onClick={()=>void onToggle(item.id,!item.completed)}
             >
-              <span className="task-check">{item.completed ? "✓" : ""}</span>
-              <span className="task-main">
-                <strong>{item.title}</strong>
-                <small>{item.meta}</small>
-              </span>
+              <span className="task-check" aria-hidden="true">{item.completed?'✓':''}</span>
+              <span className="task-main"><strong>{item.title}</strong><small>{item.meta}</small></span>
+              <span className="task-status">{item.completed?'Done':'Open'}</span>
             </button>
           ))}
         </div>
       </section>
-
-      <button type="button" className="panel dump-card" onClick={onDump}>
-        <div className="dump-card-icon">
-          <SparkIcon width={18} height={18} />
-        </div>
-        <div>
-          
-          <h3>Capture</h3>
-        </div>
-        <span className="arrow-glyph">↗</span>
-      </button>
     </div>
   );
 }
