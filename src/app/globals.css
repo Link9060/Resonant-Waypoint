@@ -1141,3 +1141,103 @@ button { color: inherit; }
 .waypoint-app .horizon-row strong { flex:1; min-width:160px; }
 .waypoint-app .review-story { min-height:0; }
 .waypoint-app .plan-card { min-height:180px; }
+
+
+/* Waypoint professional workspace: content first, not marketing-page cards. */
+.waypoint-app { --radius:12px; }
+.waypoint-app .content { max-width:1220px; padding-top:22px; }
+.waypoint-app .ambient-grid,.waypoint-app .ambient-glow { opacity:0!important; }
+.waypoint-app :is(.panel,.hero-panel,.planning-editor) {
+  box-shadow:none!important;
+  border-radius:12px!important;
+  border-color:var(--line)!important;
+}
+.waypoint-app .topbar h1 { font-size:24px;font-weight:640;letter-spacing:-.035em; }
+.waypoint-app .nav-item { min-height:42px;border-radius:9px; }
+.waypoint-app .today-workspace {display:grid;gap:14px;min-width:0;max-width:1100px;}
+.waypoint-app .today-toolbar {
+  display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;
+}
+.waypoint-app .today-overview,.waypoint-app .today-actions {
+  display:flex;align-items:center;flex-wrap:wrap;gap:10px;
+}
+.waypoint-app .today-overview span {font-size:12px;color:var(--muted);padding-right:12px;border-right:1px solid var(--line);}
+.waypoint-app .today-overview span:last-child {border-right:0;}
+.waypoint-app .today-overview strong {color:var(--text);font-weight:660;font-variant-numeric:tabular-nums;}
+.waypoint-app .today-actions button {
+  min-height:38px;border-radius:9px;border:1px solid var(--line);
+  padding:8px 12px;background:var(--panel);color:var(--text);
+  cursor:pointer;font:inherit;font-size:12px;font-weight:570;
+  transition:background .16s ease,border-color .16s ease,transform .16s ease;
+}
+.waypoint-app .today-actions button:hover {background:var(--line);transform:translateY(-1px);}
+.waypoint-app .today-actions .today-new {
+  background:var(--text);color:var(--bg);border-color:var(--text);
+}
+.waypoint-app .today-actions .today-new:hover {opacity:.86;background:var(--text);}
+.waypoint-app .today-task-sheet {padding:0!important;overflow:hidden;min-height:340px;}
+.waypoint-app .today-sheet-header {
+  display:flex;align-items:center;justify-content:space-between;
+  padding:23px 25px 17px;gap:16px;
+}
+.waypoint-app .today-sheet-header h2 {
+  margin:0 0 4px;font-size:19px;font-weight:650;letter-spacing:-.03em;
+}
+.waypoint-app .today-sheet-header span {font-size:12px;color:var(--muted);}
+.waypoint-app .today-percent {font-size:26px;font-weight:630;letter-spacing:-.05em;font-variant-numeric:tabular-nums;}
+.waypoint-app .today-progress-track {height:3px;margin:0 25px 18px;background:var(--line);border-radius:4px;overflow:hidden;}
+.waypoint-app .today-progress-track > span {
+  display:block;height:100%;background:var(--text);
+  transition:width .45s cubic-bezier(.2,.8,.25,1);
+}
+.waypoint-app .today-filter-tabs {display:flex;gap:5px;padding:0 25px 15px;border-bottom:1px solid var(--line);}
+.waypoint-app .today-filter-tabs button {
+  display:inline-flex;align-items:center;gap:8px;min-height:34px;
+  padding:5px 12px;border-radius:8px;border:1px solid transparent;
+  background:transparent;color:var(--muted);font-size:12px;font-weight:540;cursor:pointer;
+}
+.waypoint-app .today-filter-tabs button[aria-pressed="true"] {
+  background:color-mix(in srgb,var(--text) 8%,transparent);
+  color:var(--text);border-color:var(--line);
+}
+.waypoint-app .today-filter-tabs button span {opacity:.74;font-variant-numeric:tabular-nums;}
+.waypoint-app .today-task-list {display:block;padding:0 25px;}
+.waypoint-app .today-task-list .task-row {
+  display:grid;grid-template-columns:24px minmax(0,1fr) 64px;gap:13px;
+  min-height:73px;width:100%;align-items:center;padding:13px 0;
+  border-top:1px solid var(--line);background:transparent;text-align:left;
+}
+.waypoint-app .today-task-list .task-row:first-child {border-top:0;}
+.waypoint-app .today-task-list .task-row:hover {background:color-mix(in srgb,var(--text) 3%,transparent);}
+.waypoint-app .today-task-list .task-main {min-width:0;gap:4px;}
+.waypoint-app .today-task-list .task-main strong {font-size:13px;line-height:1.4;font-weight:560;}
+.waypoint-app .today-task-list .task-main small {font-size:11px;line-height:1.3;color:var(--muted);}
+.waypoint-app .today-task-list .task-check {width:19px;height:19px;border-color:var(--muted);}
+.waypoint-app .today-task-list .task-status {text-align:right;color:var(--muted);font-size:11px;}
+.waypoint-app .today-empty {padding:42px 0;color:var(--muted);font-size:13px;}
+.waypoint-app .plan-grid {grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;}
+.waypoint-app :is(.plan-card,.new-plan-card) {min-height:164px;padding:20px;}
+.waypoint-app .plan-card h3 {margin-top:19px;font-size:17px;}
+.waypoint-app .review-story {padding:26px;min-height:0;}
+.waypoint-app .review-story h2 {font-size:20px;}
+.waypoint-app .metric-card {min-height:115px;padding:21px;}
+.waypoint-app .metric {font-size:30px;}
+.waypoint-app .dump-input-panel {padding:26px;}
+.waypoint-app .dump-prompt h2 {font-size:22px;margin:0;}
+.waypoint-app .brain-textarea {min-height:170px;margin-top:20px;border-radius:11px;}
+.waypoint-app .reasoning-section {padding:23px;}
+.waypoint-app :is(.direction-layout,.review-grid,.stack) {gap:14px;}
+@media(max-width:720px) {
+  .waypoint-app .today-sheet-header {padding:19px 15px 14px;}
+  .waypoint-app .today-progress-track {margin:0 15px 12px;}
+  .waypoint-app .today-filter-tabs {padding:0 15px 12px;}
+  .waypoint-app .today-task-list {padding:0 15px;}
+  .waypoint-app .today-task-list .task-row {grid-template-columns:22px minmax(0,1fr);min-height:68px;}
+  .waypoint-app .today-task-list .task-status {display:none;}
+  .waypoint-app .today-overview {width:100%;}
+  .waypoint-app .today-actions {width:100%;}
+  .waypoint-app .today-actions button {flex:1;}
+}
+@media(prefers-reduced-motion:reduce) {
+  .waypoint-app .today-progress-track>span,.waypoint-app .today-actions button {transition:none!important;}
+}
