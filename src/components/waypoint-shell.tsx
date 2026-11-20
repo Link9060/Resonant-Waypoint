@@ -716,7 +716,7 @@ function DumpView({
 }) {
   return (
     <div className="dump-layout">
-      {(reviewing || draftNotice) && <div className="capture-recovery" role="status"><span>{reviewing ? 'History · read-only' : draftNotice}</span>{reviewing && <button type="button" onClick={leaveHistory}>Back to draft</button>}</div>}
+      {(reviewing || draftNotice) && <div className="capture-recovery" role="status"><span>{reviewing ? 'History · read-only' : draftNotice}</span>{reviewing && <button type="button" onClick={leaveHistory}>Return to unfinished Capture</button>}</div>}
       <section className="panel dump-input-panel">
         <div className="dump-prompt">
           <BeaconIcon size={50} active />
@@ -747,7 +747,7 @@ function DumpView({
             onClick={processDump}
           >
             <SparkIcon width={17} height={17} />
-            {isInterpreting ? "Organizing…" : "Organize"}
+            {isInterpreting ? "Organizing…" : "Organize with RAVIN"}
           </button>
         </div>
       </section>
@@ -1192,7 +1192,7 @@ function ReviewView({
                   </small>
                 </div>
                 
-                <button type="button" onClick={()=>onOpenCapture(capture)}>Open</button>
+                <button type="button" onClick={()=>onOpenCapture(capture)}>Open reasoning</button>
               </div>
             ))}
           </div>
