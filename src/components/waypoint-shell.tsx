@@ -467,7 +467,7 @@ export function WaypointShell() {
             <BeaconIcon size={34} active />
           </div>
           <div>
-            <div className="eyebrow">ARROW</div>
+            
             <div className="brand-name">Waypoint</div>
           </div>
         </div>
@@ -512,14 +512,14 @@ export function WaypointShell() {
             <span className="orbit-dot" />
             Back to Orbit
           </button>
-          <div className="sidebar-caption">Tasks, plans, and goals in one place.</div>
+          
         </div>
       </aside>
 
       <section className="content-shell">
         <header className="topbar">
           <div>
-            <div className="eyebrow">{tabEyebrow(activeTab)}</div>
+            
             <h1>{tabTitle(activeTab)}</h1>
           </div>
 
@@ -528,7 +528,11 @@ export function WaypointShell() {
             <button type="button" className="icon-button" aria-label="Quick add" onClick={() => setActiveTab("dump")}>
               <PlusIcon width={18} height={18} />
             </button>
-            <button type="button" className="ravin-chip" onClick={() => openRavinFromWaypoint()}>
+            <button type="button" className="ravin-chip" onClick={() => {
+              const shell=(window as Window & {ArrowOS?:{openQuickRavin?:(module:string)=>void}}).ArrowOS;
+              if(shell?.openQuickRavin) shell.openQuickRavin('waypoint');
+              else openRavinFromWaypoint();
+            }}>
               <SparkIcon width={16} height={16} />
               Ask RAVIN
             </button>
@@ -614,116 +618,68 @@ export function WaypointShell() {
 }
 
 function TodayView({
-  items,
-  onToggle,
-  progress,
-  onDump, daily, pending, onPlans, onPlan
+  items, onToggle, progress, onDump, daily, pending, onPlans, onPlan
 }: {
   items: TodayItem[];
   onToggle: (id: string, completed: boolean) => void;
   progress: number;
   onDump: () => void;
   daily: ReturnType<typeof buildDailyPlan>;
-  pending:Set<string>;
-  onPlans:()=>void;
-  onPlan:()=>void;
+  pending: Set<string>;
+  onPlans: () => void;
+  onPlan: () => void;
 }) {
+  const [filter,setFilter] = useState<'open' | 'all' | 'done'>('open');
+  const open=items.filter(item=>!item.completed);
+  const completed=items.length-open.length;
+  const visible=[...items].filter(item=>filter==='all'||(filter==='open'?!item.completed:item.completed))
+    .sort((a,b)=>Number(a.completed)-Number(b.completed));
   return (
-    <div className="page-grid today-grid">
-      <section className="hero-panel">
-        <div className="hero-copy">
-          <div className="eyebrow">TODAY'S PRIORITY</div>
-          <h2>Focus on what matters next.</h2>
-          <p>
-            {daily.next ? daily.next.title : daily.activeEvent ? daily.activeEvent.title : "Your schedule is clear for now."}
-          </p>
-          <p>{daily.reason}</p>
-          <div className="daily-context"><span>{daily.openCount} open across ARROW</span><span>{daily.available} min available before your next event or 10 PM</span>{daily.blockedCount>0 && <span>{daily.blockedCount} waiting on prerequisites</span>}</div>
-          <div className="planning-control-bar"><button type="button" onClick={onPlan}>Preview a new schedule</button><button type="button" onClick={onPlans}>See upcoming work</button></div>
+    <div className="today-workspace">
+      <div className="today-toolbar">
+        <div className="today-overview">
+          <span><strong>{open.length}</strong> open</span>
+          <span><strong>{daily.available}</strong> min free</span>
+          {daily.blockedCount>0 && <span><strong>{daily.blockedCount}</strong> blocked</span>}
         </div>
-
-        <div className="progress-orbit">
-          <div className="progress-value">{progress}%</div>
-          <div className="progress-label">today</div>
-          <svg viewBox="0 0 120 120" aria-hidden="true">
-            <circle cx="60" cy="60" r="51" className="progress-track" />
-            <circle
-              cx="60"
-              cy="60"
-              r="51"
-              className="progress-ring"
-              pathLength="100"
-              strokeDasharray={`${progress} ${100 - progress}`}
-            />
-          </svg>
+        <div className="today-actions">
+          <button type="button" onClick={onPlan}>Plan week</button>
+          <button type="button" onClick={onPlans}>Plans</button>
+          <button type="button" className="today-new" onClick={onDump}>+ Capture</button>
         </div>
-      </section>
-
-      <section className="panel primary-list-panel">
-        <div className="panel-heading">
+      </div>
+      <section className="panel today-task-sheet" aria-labelledby="waypoint-today-tasks">
+        <div className="today-sheet-header">
           <div>
-            <div className="eyebrow">TODAY</div>
-            <h3>Today's tasks</h3>
+            <h2 id="waypoint-today-tasks">Tasks</h2>
+            <span>{completed} of {items.length} complete</span>
           </div>
-          <span className="soft-pill">
-            {items.filter((item) => !item.completed).length} remaining
-          </span>
+          <strong className="today-percent">{progress}%</strong>
         </div>
-
-        <div className="task-list">
-          {!items.length && <p>No tasks due today. Check Plans for upcoming work or Capture something new.</p>}
-          {[...items].sort((a,b)=>Number(a.completed)-Number(b.completed)).map((item, index) => (
+        <div className="today-progress-track" role="progressbar" aria-label="Tasks completed" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}>
+          <span style={{width:progress+'%'}} />
+        </div>
+        <div className="today-filter-tabs" role="group" aria-label="Filter tasks">
+          <button type="button" aria-pressed={filter==='open'} onClick={()=>setFilter('open')}>Open <span>{open.length}</span></button>
+          <button type="button" aria-pressed={filter==='all'} onClick={()=>setFilter('all')}>All <span>{items.length}</span></button>
+          <button type="button" aria-pressed={filter==='done'} onClick={()=>setFilter('done')}>Done <span>{completed}</span></button>
+        </div>
+        <div className="task-list today-task-list">
+          {!visible.length && <div className="today-empty">{filter==='done'?'No completed tasks':filter==='open'?'No open tasks':'No tasks today'}</div>}
+          {visible.map(item=>(
             <button type="button"
-              id={`item-${item.id}`}
-              className={`task-row ${item.completed ? "done" : ""}`}
-              key={item.id} disabled={pending.has(item.id)} aria-pressed={Boolean(item.completed)} aria-label={`${item.completed?'Reopen':'Complete'} ${item.title}`}
-              onClick={() => void onToggle(item.id, !item.completed)}
+              id={'item-'+item.id}
+              className={'task-row'+(item.completed?' done':'')}
+              key={item.id} disabled={pending.has(item.id)}
+              aria-pressed={Boolean(item.completed)}
+              aria-label={(item.completed?'Reopen ':'Complete ')+item.title}
+              onClick={()=>void onToggle(item.id,!item.completed)}
             >
-              <span className="task-index">
-                {String(index + 1).padStart(2, "0")}
-              </span>
-              <span className="task-check">{item.completed ? "✓" : ""}</span>
-              <span className="task-main">
-                <strong>{item.title}</strong>
-                <small>{item.meta}</small>
-              </span>
+              <span className="task-check" aria-hidden="true">{item.completed?'✓':''}</span>
+              <span className="task-main"><strong>{item.title}</strong><small>{item.meta}</small></span>
+              <span className="task-status">{item.completed?'Done':'Open'}</span>
             </button>
           ))}
-        </div>
-      </section>
-
-      <button type="button" className="panel dump-card" onClick={onDump}>
-        <div className="dump-card-icon">
-          <SparkIcon width={18} height={18} />
-        </div>
-        <div>
-          <div className="eyebrow">CAPTURE</div>
-          <h3>Capture a task or idea</h3>
-          <p>
-            Add a note, task, idea, or decision. RAVIN can help organize it alongside your existing plans.
-          </p>
-        </div>
-        <span className="arrow-glyph">↗</span>
-      </button>
-
-      <section className="panel now-card">
-        <div className="panel-heading">
-          <div>
-            <div className="eyebrow">FOCUS</div>
-            <h3>Up next</h3>
-          </div>
-        </div>
-
-        <div className="focus-objective">
-          <BeaconIcon size={42} active />
-          <div>
-            <strong>
-              {daily.next?.title ?? (daily.activeEvent?.title || (daily.openCount ? "Review your remaining work" : "Your task list is clear"))}
-            </strong>
-            <p>
-              {daily.reason}
-            </p>
-          </div>
         </div>
       </section>
     </div>
@@ -760,18 +716,13 @@ function DumpView({
 }) {
   return (
     <div className="dump-layout">
-      {(reviewing || draftNotice) && <div className="capture-recovery" role="status"><span>{reviewing ? 'Saved reasoning · viewing only. This will not add tasks again.' : draftNotice}</span>{reviewing && <button type="button" onClick={leaveHistory}>Return to unfinished Capture</button>}</div>}
+      {(reviewing || draftNotice) && <div className="capture-recovery" role="status"><span>{reviewing ? 'History · read-only' : draftNotice}</span>{reviewing && <button type="button" onClick={leaveHistory}>Return to unfinished Capture</button>}</div>}
       <section className="panel dump-input-panel">
         <div className="dump-prompt">
           <BeaconIcon size={50} active />
           <div>
-            <div className="eyebrow">CAPTURE & ORGANIZE</div>
-            <h2>Add what you want to remember.</h2>
-            <p>
-              Write down tasks, dates, ideas, goals, or questions in any order. RAVIN
-              can suggest how they fit with your existing schedule and plans before
-              you choose what to save.
-            </p>
+            
+            <h2>New capture</h2>
           </div>
         </div>
 
@@ -780,15 +731,15 @@ function DumpView({
           aria-label="Capture your thoughts" maxLength={16000} readOnly={reviewing}
           disabled={isInterpreting || isApplying}
           onChange={(event) => setDump(event.target.value)}
-          placeholder="I need to finish a project by Friday, remember an appointment, and make a plan for next week…"
+          placeholder="Add tasks, notes, or ideas…"
           className="brain-textarea"
         />
 
         <div className="dump-actions">
           <span>
             {dump.length
-              ? `${dump.split(/\s+/).filter(Boolean).length} words · context-aware`
-              : "Write freely, then review suggestions."}
+              ? `${dump.split(/\s+/).filter(Boolean).length} words`
+              : ""}
           </span>
           <button type="button"
             className="primary-button"
@@ -796,7 +747,7 @@ function DumpView({
             onClick={processDump}
           >
             <SparkIcon width={17} height={17} />
-            {isInterpreting ? "RAVIN is reasoning…" : "Organize with RAVIN"}
+            {isInterpreting ? "Organizing…" : "Organize with RAVIN"}
           </button>
         </div>
       </section>
@@ -805,23 +756,21 @@ function DumpView({
         <>
           <section className="capture-analysis-grid">
             <article className="panel reasoning-card reasoning-summary">
-              <div className="eyebrow">
-                {interpretation.source === "ravin" ? "RAVIN READ" : "LOCAL FALLBACK"}
-              </div>
+              {interpretation.source !== "ravin" && <div className="eyebrow">Local analysis</div>}
               <h3>{interpretation.summary}</h3>
               {interpretation.intent ? (
                 <div className="reasoning-detail">
-                  <span>WHAT YOU’RE REALLY TRYING TO DO</span>
+                  <span>Goal</span>
                   <strong>{interpretation.intent}</strong>
                 </div>
               ) : null}
             </article>
 
             <article className="panel reasoning-card reasoning-next">
-              <div className="eyebrow">SUGGESTED NEXT STEP</div>
+              <div className="eyebrow">Next step</div>
               <div className="next-move-mark"><BeaconIcon size={36} active /></div>
               <h3>{interpretation.next_move || "Review the suggestions below."}</h3>
-              <p>One move first. The rest can stay visible without competing for attention.</p>
+              
             </article>
           </section>
 
@@ -829,8 +778,8 @@ function DumpView({
             <section className="panel reasoning-section">
               <div className="panel-heading">
                 <div>
-                  <div className="eyebrow">SUMMARY</div>
-                  <h3>Signals in the situation</h3>
+                  
+                  <h3>Key details</h3>
                 </div>
                 <span className="soft-pill">{interpretation.signals.length}</span>
               </div>
@@ -851,8 +800,8 @@ function DumpView({
             <section className="panel reasoning-section">
               <div className="panel-heading">
                 <div>
-                  <div className="eyebrow">RECOMMENDED STEPS</div>
-                  <h3>How I’d move through this</h3>
+                  
+                  <h3>Steps</h3>
                 </div>
               </div>
 
@@ -875,8 +824,8 @@ function DumpView({
             <section className="panel reasoning-section questions-section">
               <div className="panel-heading">
                 <div>
-                  <div className="eyebrow">UNRESOLVED</div>
-                  <h3>Questions to clarify your plan</h3>
+                  
+                  <h3>Questions</h3>
                 </div>
               </div>
               <div className="question-list">
@@ -894,12 +843,8 @@ function DumpView({
             <section className="panel capture-panel">
               <div className="panel-heading">
                 <div>
-                  <div className="eyebrow">PROPOSED CHANGES</div>
-                  <h3>{captures.length} things Waypoint can place.</h3>
-                  <p className="interpretation-summary">
-                    These are the structured pieces underneath the route. Select only what you
-                    actually want added to Waypoint.
-                  </p>
+                  
+                  <h3>Suggested items</h3>
                 </div>
                 <span className="soft-pill">{acceptedCount} selected</span>
               </div>
@@ -945,12 +890,8 @@ function DumpView({
 
           {!captures.length && !reviewing && (
             <section className="panel reasoning-section no-changes-card">
-              <div className="eyebrow">NO CHANGES NEEDED</div>
-              <h3>This Capture was useful without turning it into more tasks.</h3>
-              <p>
-                Keep the reasoning above, or add more context if you want RAVIN to turn it into
-                something actionable.
-              </p>
+              
+              <h3>No items to add</h3>
             </section>
           )}
         </>
@@ -980,10 +921,6 @@ function PlansView({
 
   return (
     <div className="stack">
-      <section className="section-intro">
-        <div className="eyebrow">PROJECTS & NEXT STEPS</div>
-        <h2>Keep your projects and next steps organized.</h2>
-      </section>
 
       <div className="plan-grid">
         {projects.map((plan) => (
@@ -1007,13 +944,9 @@ function PlansView({
           <article className="panel plan-card">
             <div className="plan-top">
               <BeaconIcon size={28} />
-              <span>READY</span>
+              
             </div>
-            <h3>No active plans yet.</h3>
-            <div className="next-step">
-              <small>START HERE</small>
-              <strong>Use Capture to add a project, or create a new plan.</strong>
-            </div>
+            <h3>No plans yet</h3>
           </article>
         ) : null}
 
@@ -1027,8 +960,8 @@ function PlansView({
         <section className="panel capture-panel">
           <div className="panel-heading">
             <div>
-              <div className="eyebrow">UPCOMING WORK</div>
-              <h3>Tasks scheduled for later</h3>
+              
+              <h3>Upcoming tasks</h3>
             </div>
             <span className="soft-pill">{upcoming.length + futureTodos.length}</span>
           </div>
@@ -1066,8 +999,8 @@ function PlansView({
         <section className="panel capture-panel">
           <div className="panel-heading">
             <div>
-              <div className="eyebrow">PARKED</div>
-              <h3>Notes + later</h3>
+              
+              <h3>Notes &amp; later</h3>
             </div>
             <span className="soft-pill">{loose.length}</span>
           </div>
@@ -1116,10 +1049,6 @@ function CalendarView({ events, onDelete }: { events: SharedEvent[]; onDelete:(i
 
   return (
     <div className="stack">
-      <section className="section-intro">
-        <div className="eyebrow">TIME</div>
-        <h2>Your plans need somewhere to live.</h2>
-      </section>
 
       <section className="panel week-panel">
         <h3 className="week-range">{days[0].iso} – {days[6].iso}</h3>
@@ -1137,7 +1066,7 @@ function CalendarView({ events, onDelete }: { events: SharedEvent[]; onDelete:(i
                   <time>{event.allDay ? 'All day' : event.time ? `${event.time}${event.endTime ? '–'+event.endTime : ' · end time not set'}` : 'Time not set'}</time>{event.title}{event.read_only?<a href={event.source_href}>{event.source||"Open source"} ↗</a>:<button type="button" disabled={busy===event.id} aria-label={`Remove ${event.title}`} onClick={async()=>{if(!confirm(`Remove ${event.title} from your calendar?`))return;setBusy(event.id);setError('');try{await onDelete(event.id);}catch(e){setError(e instanceof Error?e.message:'Could not remove event.');}finally{setBusy(null);}}}>×</button>}
                 </div>
               )) : (
-                <div className="time-block muted">Clear</div>
+                <div className="time-block muted" aria-label="No events" />
               )}
             </div>
           ))}
@@ -1158,28 +1087,18 @@ function DirectionView({
 
   return (
     <div className="direction-layout">
-      <section className="panel direction-hero">
-        <div className="direction-beacon">
-          <BeaconIcon size={92} active />
-        </div>
-        <div className="eyebrow">GOALS & PRIORITIES</div>
-        <h2>Work toward your longer-term goals.</h2>
-        <p>
-          Keep your important goals visible and add concrete steps as your plans develop.
-        </p>
-      </section>
 
       <section className="panel horizons">
         <div className="panel-heading">
           <div>
-            <div className="eyebrow">YOUR GOALS</div>
-            <h3>Goals you're tracking</h3>
+            
+            <h3>Goals</h3>
           </div>
         </div>
 
-        {goals.length ? goals.map((goal, index) => (
+        {goals.length ? goals.map((goal) => (
           <div className="horizon-row" key={goal.id}>
-            <span>{goal.when ? goal.when.toUpperCase() : `GOAL ${index + 1}`}</span>
+            {goal.when ? <span>{goal.when}</span> : null}
             <strong>{goal.title}</strong>
             <button className="row-action compact" type="button" onClick={() => void onArchive(goal)}>
               Archive
@@ -1187,8 +1106,8 @@ function DirectionView({
           </div>
         )) : (
           <div className="horizon-row">
-            <span>EMPTY</span>
-            <strong>Capture a goal to see it here.</strong>
+            
+            <strong>No goals yet</strong>
           </div>
         )}
       </section>
@@ -1219,24 +1138,20 @@ function ReviewView({
     <div className="review-grid">
       <section className="panel metric-card">
         <span className="metric">{completed}</span>
-        <small>moves completed</small>
+        <small>Tasks completed</small>
       </section>
       <section className="panel metric-card">
         <span className="metric">{projects.length}</span>
-        <small>active plans</small>
+        <small>Plans</small>
       </section>
       <section className="panel metric-card">
         <span className="metric">{postponed.length}</span>
-        <small>things intentionally parked</small>
+        <small>Saved for later</small>
       </section>
 
       <section className="panel review-story">
-        <div className="eyebrow">CURRENT STATE</div>
-        <h2>What is actually in motion?</h2>
-        <p>
-          Waypoint reads the same account-backed planning data across ARROW, so this view follows
-          you between devices instead of being tied to one browser.
-        </p>
+        
+        <h2>Overview</h2>
 
         <div className="review-line">
           <span>Open today / overdue</span>
@@ -1255,8 +1170,8 @@ function ReviewView({
       <section className="panel capture-history">
         <div className="panel-heading">
           <div>
-            <div className="eyebrow">CAPTURE HISTORY</div>
-            <h3>Recent reasoning</h3>
+            
+            <h3>Capture history</h3>
           </div>
           <span className="soft-pill">{captures.length}</span>
         </div>
@@ -1276,30 +1191,17 @@ function ReviewView({
                     {capture.applied ? " · applied" : " · reviewed"}
                   </small>
                 </div>
-                <span>{capture.source === "ravin" ? "RAVIN" : "LOCAL"}</span>
+                
                 <button type="button" onClick={()=>onOpenCapture(capture)}>Open reasoning</button>
               </div>
             ))}
           </div>
         ) : (
-          <p className="interpretation-summary">Your recent Captures will appear here.</p>
+          <p className="interpretation-summary">No captures yet.</p>
         )}
       </section>
     </div>
   );
-}
-
-function tabEyebrow(tab: WaypointTab) {
-  const map: Record<WaypointTab, string> = {
-    today: "WAYPOINT / TODAY",
-    dump: "WAYPOINT / CAPTURE",
-    plans: "WAYPOINT / PLANS",
-    calendar: "WAYPOINT / CALENDAR",
-    direction: "WAYPOINT / DIRECTION",
-    review: "WAYPOINT / REVIEW"
-  };
-
-  return map[tab];
 }
 
 function tabTitle(tab: WaypointTab) {
